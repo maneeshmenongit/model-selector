@@ -101,3 +101,34 @@ def parse_response(payload: dict[str, Any]) -> JevAnswer:
         flags=flags,
         input_tokens=int((payload.get("usage") or {}).get("input_tokens", 0)),
     )
+
+
+class SimulatedJev:
+    """Scripted stand-in for Jev, for the web playground and what-if runs.
+
+    `choice` gets `confidence` as its probability; the rest is spread evenly.
+    """
+
+    def __init__(self, choice: str, confidence: float, flags: dict[str, float] | None = None,
+                 model: str = "simulated"):
+        if choice not in TIER_CRITERIA:
+            raise ValueError(f"unknown tier choice {choice!r}")
+        self.choice, self.confidence, self.model = choice, max(0.0, min(1.0, confidence)), model
+        self.flags = {k: max(0.0, min(1.0, float(v))) for k, v in (flags or {}).items() if k in FLAG_QUESTIONS}
+
+    def decide(self, state: dict[str, Any] | str) -> JevAnswer:
+        others = [t for t in TIER_CRITERIA if t != self.choice]
+        rest = (1 - self.confidence) / len(others)
+        probs = {t: (self.confidence if t == self.choice else rest) for t in TIER_CRITERIA}
+        return JevAnswer(model=self.model, choice=self.choice, confidence=self.confidence,
+                         probabilities=probs, flags=dict(self.flags))
+
+
+class OfflineJev:
+    """Always unavailable: shows the default-tier path."""
+
+    def __init__(self, reason: str = "simulated outage"):
+        self.reason = reason
+
+    def decide(self, state: dict[str, Any] | str) -> JevAnswer:
+        raise JevUnavailable(self.reason)

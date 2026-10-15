@@ -89,6 +89,29 @@ Request flow:
 
 Human-review requests raise `HumanReviewRequired` and land in the `review_queue` table.
 
+## Web app
+
+```sh
+tokenrouter serve --demo     # fictional models, works with no API keys
+tokenrouter serve            # your real config/tiers.yaml and request log
+```
+
+Open http://127.0.0.1:8787 (change it with `--port`).
+
+- **Playground:** type a prompt or pick a scenario and watch each stage: hard rules, Jev, escalation,
+  context floor, execution. You can simulate Jev's answer (tier, confidence, flags) or a Jev
+  outage, and take models down to watch the fallback chain. "Simulated models" runs LiteLLM for real
+  with mock responses. "Real call" calls the model and costs money.
+- **Tiers & catalog:** quality vs blended price with each tier's band drawn on it, the ranked
+  members per tier, and the refresh diff.
+- **Request log:** the exit criteria, the tier mix, and recent requests with their decision details.
+  Simulated playground runs are kept in a separate log (`data/playground.db`) so they don't skew
+  real metrics.
+
+The server uses only the standard library and binds to 127.0.0.1. Requests that run a model need
+an `X-Tokenrouter: 1` header and a localhost `Host` header, so a page open in your browser can't
+make paid calls through it.
+
 ## Evaluating Phase 1
 
 ```sh

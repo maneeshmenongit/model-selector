@@ -1,0 +1,1105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tokenrouter</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --accent: #2a78d6;
+  --t-fast: #2a78d6;
+  --t-balanced: #eb6834;
+  --t-reasoning: #1baf7a;
+  --t-human: #898781;
+  --flag-on: #52514e;
+  --flag-off: #d6d5ce;
+  --pt-qual: #b5b3aa;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --good-text: #006300;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321; --ink: #f0efec; --ink-2: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --accent: #3987e5; --t-fast: #3987e5; --t-balanced: #d95926; --t-reasoning: #199e70; --t-human: #898781;
+    --flag-on: #c3c2b7; --flag-off: #383835; --good-text: #0ca30c; --shadow: none; --pt-qual: #77766f;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321; --ink: #f0efec; --ink-2: #c3c2b7;
+  --muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --accent: #3987e5; --t-fast: #3987e5; --t-balanced: #d95926; --t-reasoning: #199e70; --t-human: #898781;
+  --flag-on: #c3c2b7; --flag-off: #383835; --good-text: #0ca30c; --shadow: none; --pt-qual: #77766f;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent); }
+code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+
+header.top {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+header.top h1 { font-size: 17px; margin: 0; letter-spacing: -0.01em; }
+header.top .sub { color: var(--ink-2); font-size: 13px; }
+header.top .spacer { flex: 1; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border); font-size: 12px; color: var(--ink-2); background: var(--surface);
+  white-space: nowrap;
+}
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; }
+.chip.demo { border-color: var(--warning); color: var(--ink); font-weight: 600; }
+nav.tabs { display: flex; gap: 4px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+nav.tabs button {
+  border: 0; background: none; padding: 10px 12px; cursor: pointer; color: var(--ink-2);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+main { padding: 20px 24px 48px; max-width: 1440px; margin: 0 auto; }
+[hidden] { display: none !important; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+  box-shadow: var(--shadow); min-width: 0;
+}
+.card h2 { font-size: 14px; margin: 0 0 2px; }
+.card .hint { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+.grid-play { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px; align-items: start; }
+.stack { display: grid; gap: 16px; min-width: 0; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 1000px) {
+  .grid-play, .two { grid-template-columns: minmax(0, 1fr); }
+  main { padding: 16px; }
+  header.top, nav.tabs { padding-left: 16px; padding-right: 16px; }
+}
+
+label.field { display: grid; gap: 4px; font-size: 12.5px; color: var(--ink-2); }
+textarea, input[type=number], select {
+  width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--page);
+  padding: 8px 10px; color: var(--ink);
+}
+textarea { min-height: 96px; resize: vertical; }
+.row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+fieldset { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 0; display: grid; gap: 10px; }
+legend { padding: 0 6px; font-weight: 600; font-size: 13px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; width: 100%; }
+.seg button {
+  flex: 1; border: 0; background: var(--surface); padding: 6px 8px; cursor: pointer; color: var(--ink-2);
+  font-size: 12.5px; border-right: 1px solid var(--border);
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.seg button:disabled { opacity: .45; cursor: not-allowed; }
+.scenarios { display: flex; gap: 6px; flex-wrap: wrap; }
+.scenarios button {
+  border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 3px 10px;
+  font-size: 12px; cursor: pointer; color: var(--ink-2);
+}
+.scenarios button:hover { background: var(--surface-2); color: var(--ink); }
+.tierpick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.tierpick label {
+  display: flex; align-items: center; gap: 6px; justify-content: center; border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 4px; cursor: pointer; font-size: 12px;
+}
+.tierpick input { position: absolute; opacity: 0; pointer-events: none; }
+.tierpick label:has(input:checked) { border-color: var(--ink); background: var(--surface-2); font-weight: 600; }
+.tierpick label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.slider { display: grid; grid-template-columns: 130px minmax(0, 1fr) 44px; align-items: center; gap: 8px; font-size: 12.5px; }
+.slider span:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+input[type=range] { width: 100%; accent-color: var(--ink); }
+.checks { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; }
+.checks label { display: inline-flex; gap: 6px; align-items: center; }
+.downlist { display: grid; gap: 4px; max-height: 180px; overflow: auto; font-size: 12px; }
+.downlist label { display: grid; grid-template-columns: 16px 92px minmax(0, 1fr); gap: 6px; align-items: center; }
+.downlist .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note { font-size: 12.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.note.warn { border-left: 3px solid var(--warning); }
+.runbar { display: flex; gap: 10px; align-items: center; }
+.btn {
+  border: 0; border-radius: 8px; padding: 9px 16px; background: var(--ink); color: var(--surface);
+  font-weight: 600; cursor: pointer;
+}
+.btn:disabled { opacity: .5; cursor: progress; }
+
+.tier-tag {
+  display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap;
+}
+.tier-tag .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.hero { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.hero .big { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; display: flex; align-items: center; gap: 10px; }
+.hero .big .sw { width: 16px; height: 16px; border-radius: 4px; }
+.hero .meta { color: var(--ink-2); font-size: 13px; display: grid; gap: 2px; }
+.hero .meta b { color: var(--ink); font-weight: 600; }
+.error-box { border-left: 3px solid var(--critical); }
+
+.pipeline { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1200px) { .pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .pipeline { grid-template-columns: minmax(0, 1fr); } }
+.step {
+  text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: 10px;
+  padding: 10px 12px; cursor: pointer; display: grid; gap: 6px; position: relative; min-width: 0;
+}
+.step:hover { background: var(--surface-2); }
+.step[aria-expanded="true"] { border-color: var(--ink); }
+.step .n { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.step .title { font-weight: 600; }
+.step .summary { font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--ink); }
+.status .ic {
+  width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center;
+  font-size: 10px; color: #fff; flex: none;
+}
+.status.good .ic { background: var(--good); }
+.status.warning .ic { background: var(--warning); color: #0b0b0b; }
+.status.serious .ic { background: var(--serious); color: #0b0b0b; }
+.status.critical .ic { background: var(--critical); }
+.status.muted .ic { background: var(--axis); color: var(--ink); }
+.detail { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 12px; }
+.detail pre {
+  background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+  overflow: auto; max-height: 260px; margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.table-wrap { overflow-x: auto; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--surface-2); }
+tr.sel td { background: var(--surface-2); }
+
+/* bar rows */
+.bars { display: grid; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) 88px; align-items: center; gap: 10px; font-size: 12.5px; }
+.bar-row .lbl { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-row .lbl b { color: var(--ink); }
+.bar-row .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+.track { position: relative; height: 14px; }
+.track .base { position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: var(--axis); }
+.track .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 0 4px 4px 0; min-width: 2px; }
+.track .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); border-radius: 1px; }
+.track .hit { position: absolute; inset: -5px 0; }
+
+/* chain */
+.chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.node {
+  border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; font-size: 12px; display: grid; gap: 1px;
+  background: var(--surface); min-width: 0;
+}
+.node .id { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.node .m { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; overflow-wrap: anywhere; }
+.node.served { border-color: var(--good); }
+.node.failed { opacity: .75; }
+.node.failed .m { text-decoration: line-through; }
+.node.untried { opacity: .5; }
+.arrow { color: var(--muted); }
+.response {
+  white-space: pre-wrap; background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; margin-top: 10px; font-size: 13px; overflow-wrap: anywhere;
+}
+
+/* scatter */
+.scatter-wrap { position: relative; }
+svg text { fill: var(--muted); font-size: 11px; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+svg .band-label { font-size: 11.5px; font-weight: 600; fill: var(--ink-2); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin: 4px 0 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.tiercards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1000px) { .tiercards { grid-template-columns: minmax(0, 1fr); } }
+.tiercard h3 { margin: 0; font-size: 15px; }
+.tiercard .band { color: var(--ink-2); font-size: 12.5px; margin: 4px 0 10px; }
+.members { display: grid; gap: 6px; }
+.member { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 12.5px; }
+.member .rk { color: var(--muted); font-variant-numeric: tabular-nums; }
+.member .nm { font-family: ui-monospace, Menlo, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.member .pr { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.diff h4 { margin: 12px 0 4px; font-size: 13px; }
+.diff ul { margin: 0; padding-left: 18px; }
+.diff li { margin: 2px 0; font-size: 12.5px; overflow-wrap: anywhere; }
+
+.tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1000px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.tile .k { font-size: 12.5px; color: var(--ink-2); }
+.tile .v { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
+.tile .s { font-size: 12px; color: var(--muted); }
+.criteria { display: grid; gap: 8px; }
+.empty { color: var(--muted); font-size: 13px; padding: 16px 0; }
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.toolbar .seg { width: auto; }
+.linkbtn { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12.5px; }
+
+#tooltip {
+  position: fixed; pointer-events: none; z-index: 10; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12); max-width: 320px; display: none;
+}
+#tooltip .tv { font-weight: 650; font-size: 13px; }
+#tooltip .tl { color: var(--ink-2); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.loading { opacity: .55; transition: opacity .15s; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>tokenrouter</h1>
+    <div class="sub">Jev picks the tier · LiteLLM picks the model inside it</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="chips" id="headerChips"></div>
+  <div class="seg" style="width:auto" role="group" aria-label="Theme">
+    <button data-theme-btn="auto" aria-pressed="true">Auto</button>
+    <button data-theme-btn="light" aria-pressed="false">Light</button>
+    <button data-theme-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="play" aria-selected="true">Playground</button>
+  <button role="tab" data-tab="tiers" aria-selected="false">Tiers &amp; catalog</button>
+  <button role="tab" data-tab="log" aria-selected="false">Request log</button>
+</nav>
+
+<main>
+  <!-- PLAYGROUND -->
+  <section class="view" id="view-play">
+    <div class="grid-play">
+      <form class="card stack" id="form" autocomplete="off">
+        <div>
+          <h2>Request</h2>
+          <p class="hint">Write a prompt or pick a scenario, then watch each stage decide.</p>
+          <div class="scenarios" id="scenarios"></div>
+        </div>
+        <label class="field">Prompt
+          <textarea id="prompt">Tag each review as positive, negative or neutral: "Battery is great", "Screen cracked".</textarea>
+        </label>
+        <div class="row">
+          <label class="field">Project <select id="project"></select></label>
+          <label class="field">Max output tokens <input type="number" id="maxTokens" min="1" value="1000"></label>
+          <label class="field" title="Used only for the cost comparison">Expected output <input type="number" id="expectedOut" min="0" value="300"></label>
+        </div>
+        <div class="field" style="display:grid;gap:4px;font-size:12.5px;color:var(--ink-2)">Declared data classes
+          <div class="checks" id="dataClasses"></div>
+        </div>
+
+        <fieldset>
+          <legend>Jev decision</legend>
+          <div class="seg" role="group" aria-label="Jev mode" id="jevMode">
+            <button type="button" data-v="simulate" aria-pressed="true">Simulate</button>
+            <button type="button" data-v="live" aria-pressed="false">Live API</button>
+            <button type="button" data-v="offline" aria-pressed="false">Offline</button>
+          </div>
+          <div id="jevSim" class="stack" style="gap:10px">
+            <div class="tierpick" id="tierPick" role="radiogroup" aria-label="Jev's tier choice"></div>
+            <div class="slider"><span>Confidence</span><input type="range" id="conf" min="0" max="1" step="0.01" value="0.85"><span id="confV"></span></div>
+            <div id="flagSliders" class="stack" style="gap:6px"></div>
+          </div>
+          <div id="jevLive" class="note" hidden></div>
+          <div id="jevOffline" class="note" hidden>Simulates a Jev outage: the request takes the default tier and skips the confidence check.</div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Execution</legend>
+          <div class="seg" role="group" aria-label="Execution mode" id="execMode">
+            <button type="button" data-v="dry" aria-pressed="true">Decision only</button>
+            <button type="button" data-v="sim" aria-pressed="false">Simulated models</button>
+            <button type="button" data-v="real" aria-pressed="false">Real call</button>
+          </div>
+          <div id="execDry" class="note">Runs the decision pipeline only. Nothing is called or logged.</div>
+          <div id="execSim" hidden class="stack" style="gap:6px">
+            <div class="note">LiteLLM runs for real, with mock responses in place of providers. Take models down to watch the fallback chain.</div>
+            <div class="downlist" id="downList"></div>
+          </div>
+          <div id="execReal" hidden class="note warn"></div>
+        </fieldset>
+
+        <div class="runbar">
+          <button class="btn" id="runBtn" type="submit">Route request</button>
+          <label class="checks"><input type="checkbox" id="autoRun" checked> Re-run on change</label>
+        </div>
+      </form>
+
+      <div class="stack" id="results">
+        <div class="card" id="heroCard"><div class="empty">Route a request to see the decision.</div></div>
+        <div class="card">
+          <h2>Pipeline</h2>
+          <p class="hint">Each stage can keep, move or stop the request. Click a stage for its details.</p>
+          <div class="pipeline" id="pipeline"></div>
+          <div class="detail" id="stepDetail" hidden></div>
+        </div>
+        <div class="two">
+          <div class="card">
+            <h2>Jev's answer</h2>
+            <p class="hint" id="jevHint">Probability per tier; the black tick is the escalation threshold.</p>
+            <div class="bars" id="probBars"></div>
+            <h2 style="margin-top:16px">Flags</h2>
+            <p class="hint">Probability of yes. Set at or above the tick.</p>
+            <div class="bars" id="flagBars"></div>
+          </div>
+          <div class="card">
+            <h2>Cost of this request by tier</h2>
+            <p class="hint" id="costHint"></p>
+            <div class="bars" id="costBars"></div>
+            <p class="hint" id="costNote" style="margin-top:12px"></p>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Fallback chain</h2>
+          <p class="hint">The order LiteLLM tries models: the tier's members by rank, then one tier up.</p>
+          <div class="chain" id="chain"></div>
+          <div id="responseBox"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TIERS -->
+  <section class="view" id="view-tiers" hidden>
+    <div class="stack">
+      <div class="card">
+        <div class="toolbar" style="justify-content:space-between">
+          <div>
+            <h2>Quality vs price</h2>
+            <p class="hint" style="margin:0" id="scatterHint"></p>
+          </div>
+          <div class="toolbar" style="margin:0">
+            <label class="field" style="grid-auto-flow:column;align-items:center;gap:6px">Refresh <select id="refreshSel"></select></label>
+            <button class="linkbtn" id="tableToggle" type="button">Show as table</button>
+          </div>
+        </div>
+        <div class="legend" id="scatterLegend"></div>
+        <div class="scatter-wrap" id="scatter"></div>
+        <div class="table-wrap" id="catalogTable" hidden></div>
+      </div>
+      <div class="tiercards" id="tierCards"></div>
+      <div class="two">
+        <div class="card diff">
+          <h2>Refresh diff</h2>
+          <p class="hint" id="diffStatus"></p>
+          <div id="diffBody"></div>
+        </div>
+        <div class="card">
+          <h2>How a model gets into a tier</h2>
+          <ol style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--ink-2);display:grid;gap:6px" id="howTo"></ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOG -->
+  <section class="view" id="view-log" hidden>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="Log source" id="logSource">
+        <button type="button" data-v="requests" aria-pressed="true">Requests</button>
+        <button type="button" data-v="playground" aria-pressed="false">Playground runs</button>
+      </div>
+      <button class="linkbtn" id="logRefresh" type="button">Refresh</button>
+      <span class="hint" style="margin:0" id="logHint"></span>
+    </div>
+    <div class="stack">
+      <div class="tiles" id="tiles"></div>
+      <div class="two">
+        <div class="card"><h2>Phase 1 exit criteria</h2><p class="hint">From the design doc, computed on this log.</p><div class="criteria" id="criteria"></div></div>
+        <div class="card"><h2>Requests by tier</h2><p class="hint">Where requests were routed.</p><div class="bars" id="tierMix"></div></div>
+      </div>
+      <div class="card">
+        <h2>Recent requests</h2>
+        <p class="hint">Prompts are stored as hashes only. Click a row for its decision details.</p>
+        <div class="table-wrap" id="logTable"></div>
+        <div class="detail" id="logDetail" hidden></div>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="tooltip" role="tooltip"></div>
+
+<script>
+"use strict";
+// ---------- tiny DOM helper: text always goes through textContent ----------
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "style") el.setAttribute("style", v);
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null || kid === false) continue;
+    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+const $ = (s) => document.querySelector(s);
+const TIERS = ["fast", "balanced", "reasoning"];
+const TIER_LABEL = { fast: "fast", balanced: "balanced", reasoning: "reasoning", human_review: "human review" };
+const tierColor = (t) => `var(--t-${t === "human_review" ? "human" : t})`;
+const pct = (v) => v == null ? "n/a" : `${Math.round(v * 100)}%`;
+function usd(v) {
+  if (v == null) return "n/a";
+  if (v === 0) return "$0";
+  if (v < 0.01) return "$" + v.toPrecision(2);
+  return "$" + v.toFixed(v < 1 ? 4 : 2);
+}
+const fmtInt = (n) => n == null ? "n/a" : Number(n).toLocaleString();
+function tierTag(t, extra) {
+  return h("span", { class: "tier-tag" }, h("span", { class: "sw", style: `background:${tierColor(t)}` }), TIER_LABEL[t] || t, extra || "");
+}
+function statusEl(kind, label) {
+  const ic = { good: "✓", warning: "↑", serious: "↯", critical: "■", muted: "–" }[kind] || "•";
+  return h("span", { class: `status ${kind}` }, h("span", { class: "ic", "aria-hidden": "true" }, ic), label);
+}
+
+// ---------- tooltip ----------
+const tip = $("#tooltip");
+function showTip(ev, value, lines) {
+  tip.replaceChildren(h("div", { class: "tv" }, value), ...lines.map((l) => h("div", { class: "tl" }, l)));
+  tip.style.display = "block";
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => { tip.style.display = "none"; };
+function hoverable(el, value, lines) {
+  el.addEventListener("pointermove", (e) => showTip(e, value, lines));
+  el.addEventListener("pointerleave", hideTip);
+  el.setAttribute("tabindex", "0");
+  el.setAttribute("aria-label", [value, ...lines].join(", "));
+  el.addEventListener("focus", () => {
+    const r = el.getBoundingClientRect();
+    showTip({ clientX: r.right, clientY: r.top }, value, lines);
+  });
+  el.addEventListener("blur", hideTip);
+  return el;
+}
+
+// ---------- theme ----------
+function setTheme(mode) {
+  if (mode === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", mode);
+  document.querySelectorAll("[data-theme-btn]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeBtn === mode)));
+  try { localStorage.setItem("tokenrouter-theme", mode); } catch (e) {}
+}
+document.querySelectorAll("[data-theme-btn]").forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.themeBtn)));
+try { setTheme(localStorage.getItem("tokenrouter-theme") || "auto"); } catch (e) { setTheme("auto"); }
+
+// ---------- api ----------
+async function api(path, body) {
+  const opts = body ? { method: "POST", headers: { "Content-Type": "application/json", "X-Tokenrouter": "1" }, body: JSON.stringify(body) } : {};
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+
+// ---------- tabs ----------
+function showTab(name) {
+  document.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+  document.querySelectorAll(".view").forEach((v) => { v.hidden = v.id !== `view-${name}`; });
+  if (name === "tiers") loadCatalog();
+  if (name === "log") loadLog();
+}
+document.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+function segmented(id, onChange) {
+  const root = document.getElementById(id);
+  root.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    if (b.disabled) return;
+    root.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    onChange(b.dataset.v);
+  }));
+  return () => root.querySelector('[aria-pressed="true"]').dataset.v;
+}
+
+// ---------- state ----------
+let STATE = null;
+const SCENARIOS = [
+  { name: "Simple tagging", prompt: 'Tag each review as positive, negative or neutral: "Battery is great", "Screen cracked".', jev: { choice: "fast", confidence: 0.9 } },
+  { name: "Unsure → escalate", prompt: "Classify this support ticket into billing, technical or sales: 'I was charged twice and now the app crashes.'", jev: { choice: "fast", confidence: 0.45 } },
+  { name: "Hard debugging", prompt: "Find the race condition in this async worker pool; it deadlocks under load when two jobs share a lock.", jev: { choice: "reasoning", confidence: 0.78, flags: { needs_tools: 0.2 } } },
+  { name: "Long document", prompt: "Read the whole attached 300-page contract and list every termination clause.", jev: { choice: "fast", confidence: 0.82, flags: { needs_long_context: 0.93 } } },
+  { name: "Sensitive", prompt: "My lab results show elevated ALT and AST. Should I stop taking my medication?", jev: { choice: "balanced", confidence: 0.7, flags: { is_sensitive: 0.94 } } },
+  { name: "Leaked secret", prompt: "Deploy the service using this key: sk-ant-EXAMPLEEXAMPLEEXAMPLE1234 and report back.", jev: { choice: "fast", confidence: 0.9 } },
+  { name: "Live data", prompt: "What is the current price of Bitcoin and how did it move today?", jev: { choice: "balanced", confidence: 0.66, flags: { needs_current_info: 0.91 } } },
+];
+const FLAG_LABEL = { needs_tools: "needs tools", needs_long_context: "needs long context", needs_current_info: "needs current info", is_sensitive: "is sensitive" };
+
+function buildForm() {
+  const sc = $("#scenarios");
+  SCENARIOS.forEach((s) => sc.append(h("button", { type: "button", onclick: () => applyScenario(s) }, s.name)));
+
+  const proj = $("#project");
+  Object.keys(STATE.projects).forEach((p) => proj.append(h("option", { value: p }, p)));
+  $("#maxTokens").value = STATE.decision.max_output_tokens_default;
+
+  const dc = $("#dataClasses");
+  [...STATE.decision.blocked_data_classes, "pii"].forEach((c) => dc.append(
+    h("label", {}, h("input", { type: "checkbox", value: c, onchange: maybeRun }),
+      c, STATE.decision.blocked_data_classes.includes(c) ? h("span", { style: "color:var(--muted)" }, "(blocked)") : "")));
+
+  const tp = $("#tierPick");
+  ["fast", "balanced", "reasoning", "human_review"].forEach((t, i) => tp.append(
+    h("label", {}, h("input", { type: "radio", name: "jevChoice", value: t, checked: i === 0, onchange: maybeRun }), tierTag(t))));
+
+  const fs = $("#flagSliders");
+  Object.keys(STATE.flags).forEach((f) => {
+    const v = h("span", {}, "0.00");
+    const input = h("input", { type: "range", min: 0, max: 1, step: 0.01, value: 0, "data-flag": f, title: STATE.flags[f] });
+    input.addEventListener("input", () => { v.textContent = Number(input.value).toFixed(2); maybeRun(); });
+    fs.append(h("div", { class: "slider" }, h("span", { title: STATE.flags[f] }, FLAG_LABEL[f] || f), input, v));
+  });
+  const conf = $("#conf"), confV = $("#confV");
+  const syncConf = () => { confV.textContent = Number(conf.value).toFixed(2); };
+  conf.addEventListener("input", () => { syncConf(); maybeRun(); });
+  syncConf();
+
+  const live = $("#jevLive");
+  live.textContent = STATE.keys.TYPESAFE_API_KEY
+    ? `Calls the real Jev API (${STATE.decision.jev_model}). Costs $0.042 per 1M input tokens.`
+    : `TYPESAFE_API_KEY is not set, so a live call fails and the request takes the default tier (${STATE.decision.default_tier}). Set the key and restart to use Jev.`;
+
+  const real = $("#execReal");
+  const realBtn = $('#execMode [data-v="real"]');
+  if (STATE.demo) {
+    realBtn.disabled = true; realBtn.title = "Off in demo mode: the demo models are fictional";
+  }
+  real.textContent = "Calls the real model in the chosen tier and logs it with your requests. This costs money for paid providers.";
+
+  const dl = $("#downList");
+  STATE.tiers.forEach((t) => t.deployments.forEach((d) => dl.append(
+    h("label", { title: d.litellm_name }, h("input", { type: "checkbox", value: d.id, onchange: maybeRun }), tierTag(t.name, ` #${d.rank}`), h("span", { class: "mono" }, d.litellm_name)))));
+
+  ["prompt", "project", "maxTokens", "expectedOut"].forEach((id) => document.getElementById(id).addEventListener("input", maybeRun));
+}
+
+function applyScenario(s) {
+  $("#prompt").value = s.prompt;
+  document.querySelectorAll('input[name="jevChoice"]').forEach((r) => { r.checked = r.value === s.jev.choice; });
+  $("#conf").value = s.jev.confidence; $("#confV").textContent = s.jev.confidence.toFixed(2);
+  document.querySelectorAll("[data-flag]").forEach((inp) => {
+    const v = (s.jev.flags || {})[inp.dataset.flag] || 0;
+    inp.value = v; inp.nextElementSibling.textContent = v.toFixed(2);
+  });
+  run();
+}
+
+const jevMode = segmented("jevMode", (v) => {
+  $("#jevSim").hidden = v !== "simulate"; $("#jevLive").hidden = v !== "live"; $("#jevOffline").hidden = v !== "offline";
+  maybeRun();
+});
+const execMode = segmented("execMode", (v) => {
+  $("#execDry").hidden = v !== "dry"; $("#execSim").hidden = v !== "sim"; $("#execReal").hidden = v !== "real";
+  maybeRun();
+});
+
+function requestBody() {
+  const flags = {};
+  document.querySelectorAll("[data-flag]").forEach((i) => { flags[i.dataset.flag] = Number(i.value); });
+  return {
+    prompt: $("#prompt").value,
+    project: $("#project").value,
+    max_tokens: Number($("#maxTokens").value) || undefined,
+    expected_output_tokens: Number($("#expectedOut").value),
+    data_classes: [...document.querySelectorAll("#dataClasses input:checked")].map((i) => i.value),
+    jev: { mode: jevMode(), choice: document.querySelector('input[name="jevChoice"]:checked').value, confidence: Number($("#conf").value), flags },
+    execution: { mode: execMode(), fail: [...document.querySelectorAll("#downList input:checked")].map((i) => i.value) },
+  };
+}
+
+let runTimer = null, runSeq = 0;
+function maybeRun() {
+  if (!$("#autoRun").checked) return;
+  const mode = execMode(), jm = jevMode();
+  if (mode === "real" || jm === "live") return; // never auto-spend
+  clearTimeout(runTimer); runTimer = setTimeout(run, 250);
+}
+$("#form").addEventListener("submit", (e) => { e.preventDefault(); run(); });
+
+async function run() {
+  const seq = ++runSeq;
+  const btn = $("#runBtn");
+  btn.disabled = true; $("#results").classList.add("loading");
+  try {
+    const res = await api("/api/route", requestBody());
+    if (seq === runSeq) renderResult(res);
+  } catch (e) {
+    if (seq === runSeq) renderError(e.message);
+  } finally {
+    if (seq === runSeq) { btn.disabled = false; $("#results").classList.remove("loading"); }
+  }
+}
+
+function renderError(msg) {
+  $("#heroCard").replaceChildren(h("div", { class: "note error-box" }, msg));
+}
+
+// ---------- result rendering ----------
+let LAST = null, OPEN_STEP = null;
+function renderResult(res) {
+  LAST = res;
+  const d = res.decision, ex = res.execution;
+  const primary = res.chain[0];
+  const served = ex && ex.status === "served";
+  const metaLines = [];
+  if (d.tier === "human_review") metaLines.push(h("div", {}, "No model is called; the request is queued for a person."));
+  else if (served) metaLines.push(h("div", {}, "Served by ", h("b", { class: "mono" }, ex.model), ex.fallback_used ? " (after fallback)" : "", ex.simulated ? " · simulated" : ""));
+  else if (primary) metaLines.push(h("div", {}, "Primary model ", h("b", { class: "mono" }, primary.model)));
+  metaLines.push(h("div", {}, `Decided by ${d.source === "jev" ? "Jev" : d.source === "default" ? "default (Jev unavailable)" : "hard rule"}`,
+    d.jev_version ? ` · ${d.jev_version}` : "", ` · ${fmtInt(d.prompt_tokens)} prompt tokens · ${d.decision_ms.toFixed(1)} ms`));
+  const hero = h("div", { class: "hero" },
+    h("div", { class: "big" }, h("span", { class: "sw", style: `background:${tierColor(d.tier)}` }), TIER_LABEL[d.tier]),
+    h("div", { class: "meta" }, ...metaLines));
+  const kids = [hero];
+  if (res.error) kids.push(h("div", { class: "note error-box", style: "margin-top:12px" }, res.error));
+  $("#heroCard").replaceChildren(...kids);
+
+  renderPipeline(res);
+  renderProbs(d);
+  renderCosts(res);
+  renderChain(res);
+}
+
+function stepStatus(s) {
+  return {
+    pass: ["good", "Passed"], kept: ["good", "Kept"], changed: ["warning", "Moved"], stop: ["critical", "Stopped"],
+    fallback: ["serious", "Fallback"], skipped: ["muted", "Skipped"],
+  }[s.outcome] || ["muted", s.outcome];
+}
+const STEP_TITLE = { hard_rules: "Hard rules", jev: "Jev decision", escalation: "Escalation", context_floor: "Context floor", execution: "Execution" };
+
+function executionStep(res) {
+  const ex = res.execution, d = res.decision;
+  if (!ex) {
+    return { step: "execution", outcome: "skipped", tier: d.tier,
+      summary: d.tier === "human_review" ? "nothing to call" : `not run · would try ${res.chain[0] ? res.chain[0].model : "?"} first` };
+  }
+  if (ex.status === "served") return { step: "execution", outcome: ex.fallback_used ? "changed" : "pass", tier: ex.tier,
+    summary: `${ex.fallback_used ? "fell back to" : "served by"} ${ex.model} · ${usd(ex.usd)} · ${Math.round(ex.latency_ms)} ms`, data: ex };
+  if (ex.status === "human_review") return { step: "execution", outcome: "stop", tier: "human_review", summary: `queued for review (request ${ex.request_id})`, data: ex };
+  if (ex.status === "budget") return { step: "execution", outcome: "stop", tier: null, summary: "blocked by budget", data: ex };
+  return { step: "execution", outcome: "stop", tier: d.tier, summary: "every model in the chain failed", data: ex };
+}
+
+function renderPipeline(res) {
+  const steps = [...res.decision.trace];
+  const have = new Set(steps.map((s) => s.step));
+  ["hard_rules", "jev", "escalation", "context_floor"].forEach((k) => {
+    if (!have.has(k)) steps.push({ step: k, outcome: "skipped", summary: "not reached", tier: null });
+  });
+  steps.sort((a, b) => Object.keys(STEP_TITLE).indexOf(a.step) - Object.keys(STEP_TITLE).indexOf(b.step));
+  steps.push(executionStep(res));
+  const box = $("#pipeline");
+  box.replaceChildren(...steps.map((s, i) => {
+    const [kind, label] = stepStatus(s);
+    const btn = h("button", { type: "button", class: "step", "aria-expanded": String(OPEN_STEP === s.step) },
+      h("div", { class: "n" }, `${i + 1} · ${STEP_TITLE[s.step]}`),
+      statusEl(kind, label),
+      h("div", { class: "summary" }, s.summary),
+      s.tier ? tierTag(s.tier) : h("span", { class: "summary" }, "—"));
+    btn.addEventListener("click", () => { OPEN_STEP = OPEN_STEP === s.step ? null : s.step; renderPipeline(LAST); });
+    return btn;
+  }));
+  const det = $("#stepDetail");
+  const open = steps.find((s) => s.step === OPEN_STEP);
+  det.hidden = !open;
+  if (open) det.replaceChildren(...stepDetail(open, res));
+}
+
+function kv(rows) {
+  return h("table", {}, h("tbody", {}, rows.filter(Boolean).map(([k, v]) => h("tr", {}, h("th", { style: "width:40%" }, k), h("td", {}, v)))));
+}
+function stepDetail(s, res) {
+  const d = s.data || {};
+  const title = h("h2", {}, STEP_TITLE[s.step]);
+  if (s.step === "hard_rules") return [title, h("p", { class: "hint" }, "Enforced in code before Jev sees anything. Jev is weak on numbers, so token counts and budgets never go to it."),
+    kv([["Prompt tokens", fmtInt(d.prompt_tokens)], ["Declared data classes", (d.declared || []).join(", ") || "none"],
+      ["Detected by pattern", (d.detected || []).join(", ") || "none"], ["Blocked", (d.blocked || []).join(", ") || "none"],
+      ["Monthly budget", d.budget_cap == null ? "no cap" : `${usd(d.month_spend)} spent of ${usd(d.budget_cap)}`]])];
+  if (s.step === "jev") return [title, h("p", { class: "hint" }, d.error ? `Unavailable: ${d.error}` : `Answered by ${d.version} in ${(d.ms || 0).toFixed(1)} ms.`),
+    h("div", { class: "hint", style: "margin:0" }, "State sent to Jev (words, not numbers; truncated prompt or project summary):"),
+    h("pre", {}, JSON.stringify(d.state, null, 2))];
+  if (s.step === "escalation") return [title, h("p", { class: "hint" }, "Sensitive requests go to human review; a confidence below the tier's threshold moves the request one tier up."),
+    kv([["Tier before", d.before ? TIER_LABEL[d.before] : "—"], d.confidence != null && ["Jev confidence", pct(d.confidence)],
+      d.threshold != null && ["Threshold for that tier", pct(d.threshold)], d.sensitive != null && ["is_sensitive", `${pct(d.sensitive)} (threshold ${pct(d.sensitive_threshold)})`],
+      ["Tier after", s.tier ? TIER_LABEL[s.tier] : "—"]])];
+  if (s.step === "context_floor") return [title, h("p", { class: "hint" }, "The tier's primary model must fit prompt + max output tokens (and tools, if needed). Requirements Jev inferred are dropped if no tier can meet them."),
+    kv([["Context needed", fmtInt(d.needed_context) + " tokens"], ["Needs tools", d.needs_tools ? "yes" : "no"], d.relaxed && ["Relaxed", "inferred requirement could not be met by any tier; dropped"]]),
+    d.checks ? h("table", { style: "margin-top:8px" }, h("thead", {}, h("tr", {}, h("th", {}, "Tier"), h("th", {}, "Fits"), h("th", {}, "Why not"))),
+      h("tbody", {}, d.checks.map((c) => h("tr", {}, h("td", {}, tierTag(c.tier)), h("td", {}, statusEl(c.ok ? "good" : "critical", c.ok ? "Fits" : "Doesn't fit")), h("td", {}, c.why || "—"))))) : ""];
+  if (s.step === "execution") {
+    const ex = res.execution;
+    if (!ex) return [title, h("p", { class: "hint" }, "Decision only: switch Execution to 'Simulated models' or 'Real call' to run it.")];
+    return [title, kv([["Status", ex.status], ex.model && ["Model", ex.model], ex.deployment_id && ["Deployment", ex.deployment_id],
+      ex.usd != null && ["Cost", usd(ex.usd)], ex.latency_ms != null && ["Latency", `${Math.round(ex.latency_ms)} ms`],
+      ex.request_id && ["Logged as request", String(ex.request_id)]])];
+  }
+  return [title];
+}
+
+function barRow(label, value, frac, color, valueText, tip, tickFrac, tickTip) {
+  const track = h("div", { class: "track" }, h("div", { class: "base" }),
+    h("div", { class: "fill", style: `width:${Math.max(0, Math.min(1, frac)) * 100}%;background:${color}` }));
+  if (tickFrac != null) {
+    const tk = h("div", { class: "tick", style: `left:calc(${tickFrac * 100}% - 1px)` });
+    track.append(tk);
+  }
+  const hit = h("div", { class: "hit" });
+  hoverable(hit, valueText, tip);
+  track.append(hit);
+  return h("div", { class: "bar-row" }, h("div", { class: "lbl" }, label), track, h("div", { class: "val" }, valueText));
+}
+
+function renderProbs(d) {
+  const pb = $("#probBars"), fb = $("#flagBars");
+  if (!d.probabilities || !Object.keys(d.probabilities).length) {
+    pb.replaceChildren(h("div", { class: "empty" }, d.source === "rule" ? "A hard rule decided; Jev was not asked." : "Jev unavailable, so the default tier was used."));
+    fb.replaceChildren();
+    return;
+  }
+  const thr = STATE.tiers.reduce((m, t) => (m[t.name] = t.confidence_threshold, m), {});
+  pb.replaceChildren(...["fast", "balanced", "reasoning", "human_review"].map((t) => {
+    const p = d.probabilities[t] || 0;
+    const chosen = t === d.jev_choice;
+    return barRow(h("span", {}, chosen ? h("b", {}, TIER_LABEL[t]) : TIER_LABEL[t]), p, p, tierColor(t), pct(p),
+      [TIER_LABEL[t] + (chosen ? " · Jev's choice" : ""), chosen && thr[t] != null ? `escalates below ${pct(thr[t])}` : ""].filter(Boolean),
+      chosen && thr[t] != null ? thr[t] : null);
+  }));
+  fb.replaceChildren(...Object.keys(STATE.flags).map((f) => {
+    const p = d.flags[f] || 0;
+    const th = f === "is_sensitive" ? STATE.decision.sensitive_threshold : STATE.decision.flag_threshold;
+    const on = p >= th;
+    return barRow(FLAG_LABEL[f] || f, p, p, on ? "var(--flag-on)" : "var(--flag-off)", pct(p),
+      [FLAG_LABEL[f] || f, on ? "set" : "not set", `threshold ${pct(th)}`], th);
+  }));
+}
+
+function renderCosts(res) {
+  const rows = [...res.costs.tiers.map((c) => ({ ...c, label: c.tier, color: tierColor(c.tier) })),
+    { tier: "baseline", label: "baseline", model: res.costs.baseline.model, usd: res.costs.baseline.usd, color: "var(--t-human)" }];
+  const max = Math.max(...rows.map((r) => r.usd || 0), 1e-12);
+  $("#costHint").textContent = `${fmtInt(res.decision.prompt_tokens)} prompt + ${fmtInt(res.expected_output_tokens)} output tokens, priced at each tier's primary model.`;
+  $("#costBars").replaceChildren(...rows.map((r) => {
+    const chosen = r.tier === res.decision.tier;
+    const label = r.tier === "baseline" ? h("span", {}, "baseline") : h("span", {}, chosen ? h("b", {}, `${r.label} ◂`) : r.label);
+    return barRow(label, r.usd, (r.usd || 0) / max, r.color, usd(r.usd), [r.model || "no model", chosen ? "chosen tier" : ""].filter(Boolean));
+  }));
+  const chosen = res.costs.tiers.find((c) => c.tier === res.decision.tier);
+  const base = res.costs.baseline.usd;
+  $("#costNote").textContent = chosen && base
+    ? `Chosen tier costs ${usd(chosen.usd)} vs ${usd(base)} on the baseline (${res.costs.baseline.model}): ${Math.round((1 - chosen.usd / base) * 100)}% ${chosen.usd <= base ? "cheaper" : "more expensive"}.`
+    : res.decision.tier === "human_review" ? "Human review: no model cost." : "";
+}
+
+function renderChain(res) {
+  const box = $("#chain"), ex = res.execution;
+  if (!res.chain.length) {
+    box.replaceChildren(h("div", { class: "empty" }, res.decision.tier === "human_review" ? "Human review: no model is tried." : "No models in this tier."));
+    $("#responseBox").replaceChildren();
+    return;
+  }
+  const servedId = ex && ex.status === "served" ? ex.deployment_id : null;
+  const servedIdx = res.chain.findIndex((c) => c.id === servedId);
+  const allFailed = ex && ex.status === "failed";
+  const nodes = [];
+  res.chain.forEach((c, i) => {
+    let cls = "untried", st = statusEl("muted", ex ? "Not tried" : i === 0 ? "First try" : "Fallback");
+    if (servedIdx >= 0 && i < servedIdx) { cls = "failed"; st = statusEl("critical", "Failed"); }
+    if (i === servedIdx) { cls = "served"; st = statusEl("good", "Served"); }
+    if (allFailed) { cls = "failed"; st = statusEl("critical", "Failed"); }
+    if (!ex && i === 0) cls = "";
+    if (i) nodes.push(h("span", { class: "arrow", "aria-hidden": "true" }, "→"));
+    nodes.push(h("div", { class: `node ${cls}` }, h("div", { class: "id" }, tierTag(c.tier), `#${c.rank}`), h("div", { class: "m" }, c.model), st));
+  });
+  box.replaceChildren(...nodes);
+  $("#responseBox").replaceChildren(...(ex && ex.text != null ? [h("div", { class: "response" }, ex.text)] : []));
+}
+
+// ---------- tiers & catalog ----------
+let CATALOG = null, SHOW_TABLE = false;
+async function loadCatalog(rid) {
+  try {
+    CATALOG = await api("/api/catalog" + (rid ? `?refresh_id=${rid}` : ""));
+  } catch (e) { $("#scatter").replaceChildren(h("div", { class: "note error-box" }, e.message)); return; }
+  renderCatalog();
+}
+$("#refreshSel").addEventListener("change", (e) => loadCatalog(e.target.value));
+$("#tableToggle").addEventListener("click", () => { SHOW_TABLE = !SHOW_TABLE; renderCatalog(); });
+
+function primaryTierOf(m) {
+  const top = m.tiers.filter((t) => t.top).map((t) => t.tier);
+  return TIERS.find((t) => top.includes(t)) || (m.tiers.length ? "qualifies" : "outside");
+}
+
+function renderCatalog() {
+  const c = CATALOG;
+  const sel = $("#refreshSel");
+  sel.replaceChildren(...c.refreshes.map((r) => h("option", { value: r.refresh_id, selected: r.refresh_id === c.refresh_id },
+    `#${r.refresh_id} · ${r.refreshed_at.slice(0, 10)}${r.applied ? " · applied" : " · pending"}`)));
+  $("#tableToggle").textContent = SHOW_TABLE ? "Show as chart" : "Show as table";
+  $("#scatterHint").textContent = c.models.length
+    ? `${c.models.length} scored models, ${c.unmatched.length} unmatched. Each shaded region is a tier: price ceiling (left of its edge) and quality floor (above it).`
+    : "No catalog yet. Run `tokenrouter refresh` (needs ARTIFICIAL_ANALYSIS_API_KEY) or start with --demo.";
+  const legend = $("#scatterLegend");
+  legend.replaceChildren(...TIERS.map((t) => h("span", {}, h("i", { style: `background:${tierColor(t)}` }), `top ${c.top_n || 3} in ${t}`)),
+    h("span", {}, h("i", { style: "background:var(--pt-qual)" }), "qualifies, not top"),
+    h("span", {}, h("i", { style: "background:transparent;border:1.5px solid var(--muted)" }), "outside every band"));
+  $("#scatter").hidden = SHOW_TABLE; $("#catalogTable").hidden = !SHOW_TABLE;
+  if (SHOW_TABLE) renderCatalogTable(); else renderScatter();
+  renderTierCards();
+  renderDiff();
+  renderHowTo();
+}
+
+function renderScatter() {
+  const box = $("#scatter");
+  const models = CATALOG.models.filter((m) => m.blended_price > 0 && m.quality != null);
+  if (!models.length) { box.replaceChildren(h("div", { class: "empty" }, "No models to plot.")); return; }
+  const W = Math.max(320, box.clientWidth || 900), H = 380, M = { l: 44, r: 16, t: 14, b: 40 };
+  const bands = STATE.tiers.map((t) => ({ name: t.name, x: t.max_blended_price, y: t.min_quality }));
+  const prices = models.map((m) => m.blended_price).concat(bands.filter((b) => b.x).map((b) => b.x));
+  const lo = Math.log10(Math.min(...prices) / 1.6), hi = Math.log10(Math.max(...prices) * 1.6);
+  const qMax = Math.ceil((Math.max(...models.map((m) => m.quality)) + 6) / 10) * 10;
+  const qMin = Math.max(0, Math.floor((Math.min(...models.map((m) => m.quality)) - 6) / 10) * 10);
+  const X = (p) => M.l + (Math.log10(p) - lo) / (hi - lo) * (W - M.l - M.r);
+  const Y = (q) => H - M.b - (q - qMin) / (qMax - qMin) * (H - M.t - M.b);
+  const NS = "http://www.w3.org/2000/svg";
+  const s = (tag, attrs, text) => {
+    const el = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    if (text != null) el.textContent = text;
+    return el;
+  };
+  const svg = s("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Scatter of model quality against blended price with tier bands" });
+  // grid + ticks
+  const ticks = [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100].filter((t) => Math.log10(t) >= lo && Math.log10(t) <= hi);
+  ticks.forEach((t) => {
+    svg.append(s("line", { x1: X(t), x2: X(t), y1: M.t, y2: H - M.b, stroke: "var(--grid)", "stroke-width": 1 }));
+    svg.append(s("text", { x: X(t), y: H - M.b + 16, "text-anchor": "middle" }, t < 1 ? `$${t}` : `$${t}`));
+  });
+  for (let q = qMin; q <= qMax; q += 10) {
+    svg.append(s("line", { x1: M.l, x2: W - M.r, y1: Y(q), y2: Y(q), stroke: "var(--grid)", "stroke-width": 1 }));
+    svg.append(s("text", { x: M.l - 8, y: Y(q) + 4, "text-anchor": "end" }, q));
+  }
+  svg.append(s("line", { x1: M.l, x2: W - M.r, y1: H - M.b, y2: H - M.b, stroke: "var(--axis)", "stroke-width": 1 }));
+  svg.append(s("text", { x: (M.l + W - M.r) / 2, y: H - 6, "text-anchor": "middle" }, "Blended price, USD per 1M tokens (0.75 × input + 0.25 × output, log scale)"));
+  svg.append(s("text", { x: 12, y: (M.t + H - M.b) / 2, "text-anchor": "middle", transform: `rotate(-90 12 ${(M.t + H - M.b) / 2})` }, "Intelligence index"));
+  // bands
+  bands.forEach((b) => {
+    const x2 = b.x ? X(b.x) : W - M.r, y1 = M.t, y2 = Y(Math.max(b.y, qMin));
+    svg.append(s("rect", { x: M.l, y: y1, width: Math.max(0, x2 - M.l), height: Math.max(0, y2 - y1), fill: tierColor(b.name), "fill-opacity": 0.05 }));
+    svg.append(s("line", { x1: M.l, x2: x2, y1: y2, y2: y2, stroke: tierColor(b.name), "stroke-width": 1.5, "stroke-opacity": 0.8 }));
+    if (b.x) svg.append(s("line", { x1: x2, x2: x2, y1: y1, y2: y2, stroke: tierColor(b.name), "stroke-width": 1.5, "stroke-opacity": 0.8 }));
+    svg.append(s("text", { x: (b.x ? x2 : W - M.r) - 6, y: y2 - 6, "text-anchor": "end", class: "band-label" },
+      `${b.name} · ${b.x ? "≤ $" + b.x : "no ceiling"} · q ≥ ${b.y}`));
+  });
+  // points; hover uses a nearest-point layer so close neighbours stay reachable
+  const pts = [];
+  models.forEach((m) => {
+    const cat = primaryTierOf(m);
+    const cx = X(m.blended_price), cy = Y(m.quality);
+    const g = s("g", { tabindex: "0" });
+    const fill = TIERS.includes(cat) ? tierColor(cat) : cat === "qualifies" ? "var(--pt-qual)" : "var(--surface)";
+    const ring = s("circle", { cx, cy, r: 6.5, fill: "var(--surface)" });
+    g.append(ring, s("circle", { cx, cy, r: 4.5, fill, stroke: cat === "outside" ? "var(--muted)" : "none", "stroke-width": 1.5 }));
+    const memberships = m.tiers.length ? m.tiers.map((t) => `${t.tier}: ${t.rank ? "#" + t.rank : "no key, unranked"}`).join(" · ") : "outside every band";
+    const lines = [`q ${m.quality} · ${usd(m.blended_price)}/M blended`, `q per $: ${m.quality_per_dollar ? m.quality_per_dollar.toFixed(1) : "∞"}`,
+      `context ${fmtInt(m.context_window)} · ${m.supports_tools ? "tools" : "no tools"}`, memberships];
+    g.setAttribute("aria-label", [m.model_id, ...lines].join(", "));
+    g.addEventListener("focus", () => { const r = g.getBoundingClientRect(); showTip({ clientX: r.right, clientY: r.top }, m.model_id, lines); ring.setAttribute("stroke", "var(--ink)"); });
+    g.addEventListener("blur", () => { hideTip(); ring.removeAttribute("stroke"); });
+    pts.push({ cx, cy, m, lines, ring });
+    svg.append(g);
+  });
+  let hot = null;
+  const clearHot = () => { if (hot) hot.ring.removeAttribute("stroke"); hot = null; };
+  svg.addEventListener("pointermove", (e) => {
+    const r = svg.getBoundingClientRect();
+    const px = (e.clientX - r.left) * (W / r.width), py = (e.clientY - r.top) * (H / r.height);
+    let best = null, bestD = 24 * 24;
+    for (const p of pts) { const d = (p.cx - px) ** 2 + (p.cy - py) ** 2; if (d < bestD) { best = p; bestD = d; } }
+    if (best !== hot) { clearHot(); if (best) { hot = best; best.ring.setAttribute("stroke", "var(--ink)"); best.ring.setAttribute("stroke-width", "1.5"); } }
+    if (best) showTip(e, best.m.model_id, best.lines); else hideTip();
+  });
+  svg.addEventListener("pointerleave", () => { clearHot(); hideTip(); });
+  // direct labels: primaries only
+  STATE.tiers.forEach((t) => {
+    const d = t.deployments.find((x) => x.rank === 1);
+    const m = d && models.find((mm) => d.litellm_name.endsWith(mm.model_id));
+    if (!m) return;
+    const px = X(m.blended_price), py = Y(m.quality);
+    // A model can rank in several tiers (bands overlap); name every placement.
+    const label = m.tiers.filter((x) => x.top).map((x) => `${x.tier} #${x.rank}`).join(" · ");
+    // Put the label on whichever side has no neighbouring point (~6.5px per character).
+    const reach = label.length * 6.5 + 14;
+    const crowdedRight = px + reach > W - M.r || models.some((o) => o !== m && X(o.blended_price) > px && X(o.blended_price) - px < reach && Math.abs(Y(o.quality) - py) < 18);
+    svg.append(s("text", { x: crowdedRight ? px - 9 : px + 9, y: py - 9, "text-anchor": crowdedRight ? "end" : "start", class: "band-label" }, label));
+  });
+  box.replaceChildren(svg);
+}
+
+function renderCatalogTable() {
+  const rows = CATALOG.models;
+  $("#catalogTable").replaceChildren(h("table", {},
+    h("thead", {}, h("tr", {}, ["Model", "Blended $/M", "Quality", "q per $", "Context", "Tools", "Tiers"].map((c, i) => h("th", { class: i && i < 5 ? "num" : "" }, c)))),
+    h("tbody", {}, rows.map((m) => h("tr", {}, h("td", { class: "mono" }, m.model_id), h("td", { class: "num" }, m.blended_price.toFixed(3)),
+      h("td", { class: "num" }, m.quality), h("td", { class: "num" }, m.quality_per_dollar ? m.quality_per_dollar.toFixed(1) : "∞"),
+      h("td", { class: "num" }, fmtInt(m.context_window)), h("td", {}, m.supports_tools ? "yes" : "no"),
+      h("td", {}, m.tiers.map((t) => `${t.tier}${t.rank ? " #" + t.rank : ""}`).join(", ") || "—"))))));
+}
+
+function renderTierCards() {
+  $("#tierCards").replaceChildren(...STATE.tiers.map((t) => {
+    const req = [t.min_context ? `≥ ${fmtInt(t.min_context)} context` : "", t.tools ? "tools" : "", t.json ? "JSON" : ""].filter(Boolean).join(", ");
+    return h("div", { class: "card tiercard" },
+      h("h3", {}, tierTag(t.name)),
+      h("div", { class: "band" }, `${t.max_blended_price != null ? "≤ $" + t.max_blended_price.toFixed(2) + "/M blended" : "no price ceiling"} · quality ≥ ${t.min_quality}`,
+        req ? ` · requires ${req}` : "", t.confidence_threshold != null ? ` · Jev confidence ≥ ${pct(t.confidence_threshold)}` : ""),
+      t.deployments.length ? h("div", { class: "members" }, t.deployments.map((d) => h("div", { class: "member" },
+        h("span", { class: "rk" }, `#${d.rank}`), h("span", { class: "nm" }, d.litellm_name),
+        h("span", { class: "pr" }, `${usd(d.blended_price)}/M · ${fmtInt(d.context_window)} ctx`)))) : h("div", { class: "empty" }, "No callable models qualify."));
+  }));
+}
+
+function renderDiff() {
+  const c = CATALOG, body = $("#diffBody");
+  const r = c.refreshes.find((x) => x.refresh_id === c.refresh_id);
+  $("#diffStatus").replaceChildren(r ? statusEl(r.applied ? "good" : "warning", r.applied ? "Applied" : "Pending review") : "",
+    r ? ` · refresh #${r.refresh_id} on ${r.refreshed_at.slice(0, 10)}` : "No refreshes yet.");
+  if (!c.diff) { body.replaceChildren(h("div", { class: "empty" }, "No diff file for this refresh.")); return; }
+  const out = []; let ul = null;
+  c.diff.split("\n").forEach((line) => {
+    if (line.startsWith("## ")) { out.push(h("h4", {}, line.slice(3))); ul = null; }
+    else if (line.startsWith("- ")) { if (!ul) { ul = h("ul", {}); out.push(ul); } ul.append(h("li", {}, line.slice(2).replaceAll("**", ""))); }
+  });
+  body.replaceChildren(...out);
+}
+
+function renderHowTo() {
+  const b = STATE.blending;
+  $("#howTo").replaceChildren(
+    h("li", {}, "Each month the refresh pulls prices from OpenRouter and quality scores from Artificial Analysis, joined on model name (plus the alias map)."),
+    h("li", {}, `Blended price = ${b.input_weight} × input + ${b.output_weight} × output, so models with cheap input but expensive output don't look cheaper than they are.`),
+    h("li", {}, "A model joins every tier whose price ceiling, quality floor and capability requirements it meets, so bands can overlap."),
+    h("li", {}, `Inside a tier, models are sorted by quality per dollar; ties go to providers you hold a key for. The top ${CATALOG.top_n || 3} become the primary and its fallbacks.`),
+    h("li", {}, "Models with no quality score are listed as unmatched and never tiered automatically."),
+    h("li", {}, "The diff shows what changed; `tokenrouter apply` promotes it to the live tiers file."));
+}
+
+// ---------- log ----------
+const logSource = segmented("logSource", () => loadLog());
+$("#logRefresh").addEventListener("click", () => loadLog());
+let LOG = null, LOG_SEL = null;
+async function loadLog() {
+  const src = logSource();
+  $("#logHint").textContent = src === "playground"
+    ? "Simulated playground runs (kept apart so they never skew real metrics)."
+    : STATE.demo ? "Demo workspace: sample requests run in shadow mode with simulated Jev and models." : "Real traffic from TokenRouter and real playground calls.";
+  try {
+    const [rep, log] = await Promise.all([api(`/api/report?source=${src}`), api(`/api/log?source=${src}&limit=200`)]);
+    LOG = log; renderReport(rep); renderLogTable();
+  } catch (e) { $("#tiles").replaceChildren(h("div", { class: "note error-box" }, e.message)); }
+}
+
+function tile(k, v, s) { return h("div", { class: "tile" }, h("div", { class: "k" }, k), h("div", { class: "v" }, v), h("div", { class: "s" }, s || "")); }
+function renderReport(r) {
+  $("#tiles").replaceChildren(
+    tile("Requests", fmtInt(r.requests), Object.entries(r.by_source).map(([k, v]) => `${v} ${k}`).join(" · ")),
+    tile("Decision overhead p95", r.decision_p95_ms == null ? "n/a" : `${Math.round(r.decision_p95_ms)} ms`, r.decision_p50_ms == null ? "" : `p50 ${Math.round(r.decision_p50_ms)} ms`),
+    tile("Cost vs baseline", r.cost_reduction == null ? "n/a" : `${Math.round(r.cost_reduction * 100)}% less`, `${usd(r.spend_usd)} vs ${usd(r.baseline_usd)}`),
+    tile("Fallbacks used", fmtInt(r.fallbacks), `${fmtInt(r.errors)} errors`),
+    tile("Graded pairs", `${r.graded}/100`, r.quality_loss == null ? "no grades yet" : `${Math.round(r.quality_loss * 100)}% quality loss`));
+  $("#criteria").replaceChildren(...r.criteria.map((c) => h("div", { style: "display:flex;gap:10px;align-items:baseline;justify-content:space-between" },
+    h("span", {}, statusEl(c.ok === true ? "good" : c.ok === false ? "critical" : "muted", c.ok === true ? "Pass" : c.ok === false ? "Fail" : "Not yet"), " ", c.name),
+    h("span", { style: "color:var(--ink-2);font-variant-numeric:tabular-nums" }, c.value))));
+  const counts = ["fast", "balanced", "reasoning", "human_review"].map((t) => [t, r.by_tier[t] || 0]);
+  const max = Math.max(1, ...counts.map((c) => c[1]));
+  $("#tierMix").replaceChildren(...(r.requests ? counts.map(([t, n]) => barRow(TIER_LABEL[t], n, n / max, tierColor(t), fmtInt(n),
+    [TIER_LABEL[t], `${n} requests · ${Math.round(100 * n / r.requests)}%`])) : [h("div", { class: "empty" }, "No requests logged yet.")]));
+}
+
+function renderLogTable() {
+  const rows = LOG.rows;
+  if (!rows.length) { $("#logTable").replaceChildren(h("div", { class: "empty" }, "No requests logged yet.")); $("#logDetail").hidden = true; return; }
+  $("#logTable").replaceChildren(h("table", {},
+    h("thead", {}, h("tr", {}, ["#", "Time (UTC)", "Project", "Mode", "Decided by", "Tier", "Model", "Cost", "Baseline", "Decision ms", "Fallback"].map((c, i) => h("th", { class: i >= 7 && i <= 9 ? "num" : "" }, c)))),
+    h("tbody", {}, rows.map((r) => {
+      const tr = h("tr", { class: `clickable ${LOG_SEL === r.id ? "sel" : ""}`, tabindex: "0" },
+        h("td", {}, r.id), h("td", {}, (r.ts || "").slice(0, 19).replace("T", " ")), h("td", {}, r.project_id), h("td", {}, r.mode),
+        h("td", {}, r.decision_source), h("td", {}, r.tier ? tierTag(r.tier) : "—"), h("td", { class: "mono" }, r.model || "—"),
+        h("td", { class: "num" }, r.mode === "shadow" ? `${usd(r.routed_est_usd)} est.` : usd(r.usd)), h("td", { class: "num" }, usd(r.baseline_usd)),
+        h("td", { class: "num" }, r.decision_ms == null ? "—" : r.decision_ms.toFixed(1)),
+        h("td", {}, r.error ? statusEl("critical", "Error") : r.fallback_used ? statusEl("serious", "Yes") : "no"));
+      const pick = () => { LOG_SEL = LOG_SEL === r.id ? null : r.id; renderLogTable(); };
+      tr.addEventListener("click", pick);
+      tr.addEventListener("keydown", (e) => { if (e.key === "Enter") pick(); });
+      return tr;
+    }))));
+  const sel = rows.find((r) => r.id === LOG_SEL), det = $("#logDetail");
+  det.hidden = !sel;
+  if (sel) det.replaceChildren(h("h2", {}, `Request ${sel.id}`), kv([
+    ["Prompt hash", h("span", { class: "mono" }, sel.prompt_hash)], ["Tokens", `${fmtInt(sel.prompt_tokens)} in · ${fmtInt(sel.completion_tokens)} out`],
+    ["Jev", sel.jev_version ? `${sel.jev_version} chose ${sel.jev_choice} (${pct(sel.jev_confidence)})` : "not used"],
+    ["Probabilities", sel.probabilities && Object.keys(sel.probabilities).length ? Object.entries(sel.probabilities).map(([k, v]) => `${k} ${pct(v)}`).join(" · ") : "—"],
+    ["Flags", sel.flags && Object.keys(sel.flags).length ? Object.entries(sel.flags).map(([k, v]) => `${k} ${pct(v)}`).join(" · ") : "—"],
+    ["Reasons", sel.reasons && sel.reasons.length ? sel.reasons.join("; ") : "—"],
+    ["Primary model", sel.primary_model || "—"], ["Latency", sel.latency_ms == null ? "—" : `${Math.round(sel.latency_ms)} ms total`],
+    sel.error && ["Error", sel.error]]));
+}
+
+// ---------- header + boot ----------
+function renderHeader() {
+  const chips = $("#headerChips");
+  const items = [];
+  if (STATE.demo) items.push(h("span", { class: "chip demo", title: "Fictional models with illustrative prices and scores" }, "DEMO DATA"));
+  const key = (name, label) => h("span", { class: "chip", title: name },
+    h("span", { class: "dot", style: `background:${STATE.keys[name] ? "var(--good)" : "var(--axis)"}` }), `${label} ${STATE.keys[name] ? "key set" : "no key"}`);
+  items.push(key("TYPESAFE_API_KEY", "Jev"), key("ARTIFICIAL_ANALYSIS_API_KEY", "Artificial Analysis"), key("OPENROUTER_API_KEY", "OpenRouter"));
+  chips.replaceChildren(...items);
+}
+
+async function boot() {
+  try {
+    STATE = await api("/api/state");
+  } catch (e) {
+    $("#heroCard").replaceChildren(h("div", { class: "note error-box" }, `Could not load state: ${e.message}`));
+    return;
+  }
+  renderHeader();
+  if (!STATE.has_tiers) {
+    $("#heroCard").replaceChildren(h("div", { class: "note warn" }, `No tiers file at ${STATE.tiers_file}. Run \`tokenrouter refresh\` (needs ARTIFICIAL_ANALYSIS_API_KEY), or restart with \`tokenrouter serve --demo\`.`));
+  }
+  buildForm();
+  if (STATE.has_tiers) run();
+  let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (CATALOG && !SHOW_TABLE && !$("#view-tiers").hidden) renderScatter(); }, 150); });
+}
+boot();
+</script>
+</body>
+</html>

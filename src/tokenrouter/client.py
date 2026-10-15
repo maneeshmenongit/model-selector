@@ -21,9 +21,9 @@ log = logging.getLogger("tokenrouter")
 
 
 class HumanReviewRequired(RuntimeError):
-    def __init__(self, request_id: int, reasons: list[str]):
+    def __init__(self, request_id: int, reasons: list[str], decision: Decision | None = None):
         super().__init__(f"request {request_id} queued for human review: {'; '.join(reasons)}")
-        self.request_id, self.reasons = request_id, reasons
+        self.request_id, self.reasons, self.decision = request_id, reasons, decision
 
 
 @dataclass
@@ -63,6 +63,7 @@ class TokenRouter:
         baseline_model: str | None = None,
         shadow_execute_rate: float = 0.0,
         baseline_kwargs: dict[str, Any] | None = None,
+        log_mode: str | None = None,
         jev: JevClient | None = None,
         table: TierTable | None = None,
         decision_log: DecisionLog | None = None,
@@ -77,6 +78,7 @@ class TokenRouter:
         self.baseline_model = baseline_model
         self.shadow_execute_rate = shadow_execute_rate
         self.baseline_kwargs = baseline_kwargs or {}  # e.g. api_base for the baseline model
+        self.log_mode = log_mode or mode                # e.g. "sim" for playground runs with mock models
         self.table = table or TierTable.load(self.s.tiers_file)
         self.log = decision_log or DecisionLog(self.s.log_db)
         self.decider = Decider(self.s, self.table, jev=jev, spend_lookup=self.log.month_spend)
@@ -113,7 +115,7 @@ class TokenRouter:
             rec.latency_ms = (time.perf_counter() - t0) * 1000
             rid = self.log.write(rec)
             self.log.enqueue_review(rid, decide_kw["project_id"], decision.reasons, messages)
-            raise HumanReviewRequired(rid, decision.reasons)
+            raise HumanReviewRequired(rid, decision.reasons, decision)
 
         try:
             ex = self.router.complete(decision.tier, messages, **kwargs)
@@ -121,6 +123,7 @@ class TokenRouter:
             rec.error = str(e)[:500]
             rec.latency_ms = (time.perf_counter() - t0) * 1000
             self.log.write(rec)
+            e.decision = decision
             raise
         self._fill_execution(rec, ex)
         rec.baseline_model = self.s.baseline_model
@@ -188,7 +191,7 @@ class TokenRouter:
         primary = self.table.primary(d.tier) if not d.needs_human else None
         return RequestRecord(
             project_id=project_id,
-            mode=mode or self.mode,
+            mode=mode or self.log_mode,
             prompt_hash=prompt_hash(messages),
             prompt_tokens=d.prompt_tokens,
             jev_version=d.jev_version,
@@ -213,6 +216,7 @@ class TokenRouter:
         rec.usd = ex.usd
         rec.llm_ms = ex.llm_ms
 
-    def close(self) -> None:
+    def close(self, close_log: bool = True) -> None:
         self._pool.shutdown(wait=False)
-        self.log.close()
+        if close_log:
+            self.log.close()

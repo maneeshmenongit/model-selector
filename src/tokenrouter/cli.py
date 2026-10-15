@@ -120,6 +120,13 @@ def cmd_audit(args, s) -> int:
     return 1 if problems else 0
 
 
+def cmd_serve(args, s) -> int:
+    from tokenrouter.web.server import serve
+
+    serve(s, demo=args.demo, host=args.host, port=args.port, reset_demo=args.reset_demo)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tokenrouter", description=__doc__)
     p.add_argument("--config", help="path to tokenrouter.yaml (default: $TOKENROUTER_CONFIG or config/)")
@@ -160,6 +167,13 @@ def build_parser() -> argparse.ArgumentParser:
     ev.set_defaults(fn=cmd_eval)
 
     sub.add_parser("audit", help="check pinned versions and .pth files").set_defaults(fn=cmd_audit)
+
+    sv = sub.add_parser("serve", help="local web app: watch routing decisions, tiers and the request log")
+    sv.add_argument("--port", type=int, default=8787)
+    sv.add_argument("--host", default="127.0.0.1", help="keep on localhost; the app can make paid calls")
+    sv.add_argument("--demo", action="store_true", help="use a demo workspace with fictional models")
+    sv.add_argument("--reset-demo", action="store_true", help="rebuild the demo workspace")
+    sv.set_defaults(fn=cmd_serve)
     return p
 
 
