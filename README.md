@@ -1,0 +1,119 @@
+# tokenrouter
+
+Token-aware model router, Phase 1 of [the design](docs_to_claude/base_architecture/tokenrouter-design.md).
+Jev picks the **tier**; LiteLLM picks the **model inside it**.
+
+| Layer | Runs | Module |
+| --- | --- | --- |
+| Catalog refresh | Monthly | `tokenrouter.catalog` — OpenRouter + Artificial Analysis → bands → rank → diff → `tiers.yaml` |
+| Decision | Every request | `tokenrouter.decision` — hard rules in code → one Jev call → escalation → context floor |
+| Execution | Every request | `tokenrouter.execution` — LiteLLM Router, ordered members per tier, fallback one tier up |
+| Log | Every request | `tokenrouter.log` — SQLite: decision, tier, model, tokens, USD, latency, Jev version |
+
+## Setup
+
+```sh
+uv venv -p 3.13
+uv pip install --require-hashes -r requirements.lock   # hash-verified, LiteLLM pinned to 1.103.0
+uv pip install --no-deps -e .
+tokenrouter audit                                      # pinned versions + unexpected .pth files
+```
+
+(`uv sync` works for development too; the lockfile is regenerated with
+`uv export --format requirements-txt --no-dev --no-emit-project > requirements.lock`.)
+
+Keys come from the environment only — see [.env.example](.env.example):
+
+| Variable | Used for |
+| --- | --- |
+| `ARTIFICIAL_ANALYSIS_API_KEY` | Quality indices for the monthly refresh (required for `refresh`) |
+| `TYPESAFE_API_KEY` | Jev decisions; without it every request takes the default tier (balanced) |
+| `OPENROUTER_API_KEY` | Reach any catalog model through OpenRouter |
+| `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, … | Call a provider directly; preferred over OpenRouter and wins ranking ties |
+
+## Monthly refresh
+
+```sh
+tokenrouter refresh        # fetch feeds, re-rank, write data/diffs/<date>-refresh-<id>.md
+tokenrouter apply          # promote data/tiers.candidate.yaml -> config/tiers.yaml after review
+tokenrouter tiers          # show the live tiers
+scripts/install_launchd.sh # schedule it: 1st of each month, 06:00 (keys from ~/.config/tokenrouter/env)
+```
+
+- Blended price = 0.75 × input + 0.25 × output (USD / 1M tokens).
+- A model joins every tier whose price ceiling, quality floor and capability requirements it meets;
+  inside a tier models are sorted by `intelligence_idx / blended_price`, ties to providers we hold a
+  key for, and the top 3 become primary + fallbacks (LiteLLM `order` 1–3).
+- The first refresh applies itself (nothing to review against). Later refreshes wait for
+  `tokenrouter apply` unless `catalog.auto_apply: true`.
+- Models whose names don't match across the feeds are listed in the diff, not tiered. Map them in
+  [config/aliases.yaml](config/aliases.yaml).
+- Local `ollama/qwen3:8b` is appended to the fast tier as its last member (`extra_members`).
+
+Tier bands, thresholds and budgets live in [config/tokenrouter.yaml](config/tokenrouter.yaml).
+
+## Using it from an agent
+
+```python
+from tokenrouter import TokenRouter, HumanReviewRequired, BudgetExceeded, RoutingError
+
+tr = TokenRouter()                                   # live mode
+res = tr.complete("Tag this review: 'great battery'", project_id="video-intel", max_tokens=200)
+print(res.text, res.tier, res.model, res.usd)
+
+tr.decide("…")                                       # dry run: decision only, nothing called or logged
+```
+
+Shadow mode keeps your fixed model in charge and logs what the router would have done:
+
+```python
+tr = TokenRouter(mode="shadow", baseline_model="anthropic/claude-sonnet-5-5",
+                 shadow_execute_rate=0.2)            # 20% also run on the routed tier, stored for grading
+res = tr.complete(messages, project_id="video-intel")  # res.response is always the baseline's
+```
+
+Request flow:
+
+1. **Hard rules (code):** declared or detected blocked data classes (`secrets`, `credentials`) →
+   human review; project monthly budget reached → `BudgetExceeded`.
+2. **Jev:** one call — Choice `tier` (fast / balanced / reasoning / human_review) plus Noul flags
+   `needs_tools`, `needs_long_context`, `needs_current_info`, `is_sensitive`. Jev gets a truncated
+   excerpt plus metadata in words (no token counts); projects with `send_raw_prompt: false` send only
+   the caller's `summary=`. Jev unavailable → `default_tier` (balanced).
+3. **Escalation:** `is_sensitive` ≥ 0.8 → human review; confidence below the tier threshold → one
+   tier up (reasoning → human review).
+4. **Context floor (code):** escalate until the tier's primary fits prompt + max output tokens and
+   required tools. Flags Jev inferred are soft: if nothing satisfies them, they are dropped.
+5. **Execution:** LiteLLM tries the tier's members in rank order, then the next tier up. If all
+   fail, `RoutingError` is raised and logged.
+
+Human-review requests raise `HumanReviewRequired` and land in the `review_queue` table.
+
+## Evaluating Phase 1
+
+```sh
+tokenrouter report --project video-intel --mode shadow    # cost, p95 overhead, fallbacks vs exit criteria
+tokenrouter eval export -n 100 --out eval_sample.csv      # fill `grade` with 1/0 (y/n)
+tokenrouter eval import eval_sample.csv
+```
+
+The `report` command checks the exit criteria directly: p95 decision overhead < 600 ms, ≥ 40 %
+cheaper than the baseline (`baseline:` in config, Sonnet 5.5 at $2 / $10 per 1M tokens), quality
+loss ≤ 5 % over ≥ 100 graded pairs, and zero failures.
+
+## Tests
+
+```sh
+uv run pytest
+```
+
+Tests run offline: HTTP is mocked with `httpx.MockTransport` and model calls use LiteLLM
+`mock_response`.
+
+## Decisions taken on the design's open questions
+
+- **Auto-apply vs approval:** approval by default (`tokenrouter apply`); flip `catalog.auto_apply`.
+- **Coding tier:** not added; `coding_idx` and `agentic_idx` are stored in the catalog so a fourth
+  tier can be added after the first refreshes.
+- **Shadow target project:** left to the caller (`project_id`); the design suggests the Video
+  Intelligence Pipeline agents.

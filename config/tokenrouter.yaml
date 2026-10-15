@@ -1,0 +1,73 @@
+# tokenrouter configuration. Paths are relative to this file's directory's parent
+# (the project root) unless absolute. Override the location with TOKENROUTER_CONFIG.
+
+paths:
+  data_dir: data                      # SQLite DBs, diffs, candidate tiers
+  tiers_file: config/tiers.yaml       # the live tier file LiteLLM loads
+  aliases_file: config/aliases.yaml   # hand-kept OpenRouter <-> Artificial Analysis map
+
+catalog:
+  # Blended price = input_weight * input + output_weight * output (USD / 1M tokens)
+  input_weight: 0.75
+  output_weight: 0.25
+  top_n: 3                            # primary + fallbacks kept per tier
+  # Wait for `tokenrouter apply` after reviewing the diff (open question in the design).
+  auto_apply: false
+
+# Starting proposals from the design doc; tune after the first refresh.
+# Order matters: it is the escalation order fast -> balanced -> reasoning.
+tiers:
+  fast:
+    max_blended_price: 0.50
+    min_quality: 25
+    requires: {min_context: 32000}
+  balanced:
+    max_blended_price: 4.00
+    min_quality: 40
+    requires: {min_context: 128000, tools: true}
+  reasoning:
+    max_blended_price: null           # no ceiling
+    min_quality: 55
+    requires: {min_context: 128000, tools: true}
+
+# Models added to a tier regardless of the feeds (after the ranked members).
+extra_members:
+  fast:
+    - litellm_name: ollama/qwen3:8b
+      provider: ollama
+      context_window: 40000
+      supports_tools: true
+      supports_json: true
+      litellm_params: {api_base: "http://localhost:11434"}
+
+decision:
+  jev_model: jev-1.13.0               # pinned; logged per decision
+  jev_timeout_s: 2.0
+  default_tier: balanced              # Jev unavailable -> this tier
+  # Choice confidence below the threshold -> escalate one tier up.
+  confidence_thresholds: {fast: 0.6, balanced: 0.5, reasoning: 0.3}
+  # Noul probability at or above which a flag counts as set.
+  flag_threshold: 0.5
+  sensitive_threshold: 0.8            # is_sensitive >= this -> human_review
+  long_context_tokens: 200000         # needs_long_context -> require this window
+  state_prompt_chars: 4000            # truncated prompt excerpt sent to Jev
+  blocked_data_classes: [secrets, credentials]
+
+execution:
+  num_retries: 1
+  timeout_s: 120
+  max_output_tokens_default: 4096
+
+# The fixed-model setup cost comparisons are made against (exit criterion: >= 40%
+# cheaper than all-Sonnet). Prices are explicit because the pinned LiteLLM price map
+# may not know the newest models.
+baseline:
+  model: anthropic/claude-sonnet-5-5
+  input_usd_per_m: 2.00     # OpenRouter /models, 2026-10-15
+  output_usd_per_m: 10.00
+
+# Per-project settings. `send_raw_prompt: false` sends Jev metadata + summary only.
+projects:
+  default:
+    monthly_budget_usd: null
+    send_raw_prompt: true

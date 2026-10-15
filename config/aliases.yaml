@@ -1,0 +1,14 @@
+# Hand-kept alias map for model names that don't normalise to the same key across
+# OpenRouter and Artificial Analysis. Keys are OpenRouter model ids.
+#
+#   aa_slug:      Artificial Analysis slug to join against (overrides name matching)
+#   litellm_name: exact LiteLLM model string to call (overrides automatic resolution)
+#   skip:         true to exclude a model from tiering entirely
+#
+# Unmatched models are reported in each refresh diff, not auto-tiered.
+#
+# Example:
+#   google/gemini-2.5-flash-lite:
+#     aa_slug: gemini-2-5-flash-lite
+#     litellm_name: gemini/gemini-2.5-flash-lite
+aliases: {}

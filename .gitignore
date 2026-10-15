@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+# runtime state: catalog DB, decision log, diffs, candidate tiers
+data/
+.env
+*.env
+eval_sample*.csv
+.DS_Store
+.idea/

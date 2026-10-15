@@ -1,0 +1,30 @@
+[project]
+name = "tokenrouter"
+version = "0.1.0"
+description = "Token-aware model router: monthly tier catalog + Jev tier decision + LiteLLM execution"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    # Pinned exactly: LiteLLM had a credential-stealing PyPI release in Mar 2026 (1.82.7/1.82.8).
+    # Install from requirements.lock with --require-hashes.
+    "litellm==1.103.0",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+tokenrouter = "tokenrouter.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tokenrouter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
