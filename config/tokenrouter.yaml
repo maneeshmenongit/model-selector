@@ -13,9 +13,18 @@ catalog:
   top_n: 3                            # primary + fallbacks kept per tier
   # Wait for `tokenrouter apply` after reviewing the diff (open question in the design).
   auto_apply: false
+  # Each model joins only the highest tier it qualifies for, so moving a request up a
+  # tier always buys a more capable model (with overlap, cheap strong models topped
+  # both fast and balanced).
+  exclusive_tiers: true
+  # Artificial Analysis scores each reasoning-effort setting separately; the plain slug
+  # is maximum effort. Score models at the first effort listed that exists, and call
+  # them at that effort (reasoning_effort is sent for low/medium/high).
+  score_effort_preference: [medium, high, "", non-reasoning, low, xhigh, reasoning, thinking, adaptive, minimal, max]
 
-# Starting proposals from the design doc; tune after the first refresh.
-# Order matters: it is the escalation order fast -> balanced -> reasoning.
+# Tuned on the first real refresh (2026-10-16), on medium-effort scores: callable
+# models' median 21.9, p90 41.1, max 52.6. The design's starting floors (25/40/55)
+# left reasoning empty. Order matters: it is the escalation order.
 tiers:
   fast:
     max_blended_price: 0.50
@@ -23,11 +32,11 @@ tiers:
     requires: {min_context: 32000}
   balanced:
     max_blended_price: 4.00
-    min_quality: 40
+    min_quality: 38
     requires: {min_context: 128000, tools: true}
   reasoning:
     max_blended_price: null           # no ceiling
-    min_quality: 55
+    min_quality: 48
     requires: {min_context: 128000, tools: true}
 
 # Models added to a tier regardless of the feeds (after the ranked members).

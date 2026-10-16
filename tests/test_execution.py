@@ -152,3 +152,22 @@ def test_budget_uses_logged_spend(make_settings, fake_jev):
     tr.complete("first call is allowed", project_id="tiny")
     with pytest.raises(BudgetExceeded):
         tr.complete("second call is over the cap", project_id="tiny")
+
+
+EMPTY_CUTOFF = {"choices": [{"index": 0, "finish_reason": "length", "message": {"role": "assistant", "content": ""}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}}
+
+
+def test_empty_truncated_answer_falls_back_to_next_model(settings):
+    ex = TierRouter(settings, table(fast1=EMPTY_CUTOFF)).complete("fast", [{"role": "user", "content": "hi"}])
+    assert ex.response.choices[0].message.content == "fast-2 answer"
+    assert (ex.deployment_id, ex.fallback_used) == ("fast-2", True)
+    # The wasted call is still paid for.
+    assert ex.usd > 1e-7 * 10 + 4e-7 * 20
+
+
+def test_all_empty_truncated_raises_with_hint(settings):
+    t = TierTable({"model_list": [dep("fast", 1, EMPTY_CUTOFF), dep("fast", 2, EMPTY_CUTOFF)],
+                   "router_settings": {"fallbacks": []}})
+    with pytest.raises(RoutingError, match="raise max_tokens"):
+        TierRouter(settings, t).complete("fast", [{"role": "user", "content": "hi"}])

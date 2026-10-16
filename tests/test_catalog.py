@@ -165,3 +165,70 @@ def test_load_dotenv(tmp_path, monkeypatch):
     assert os.environ["TR_A"] == "quoted value" and os.environ["TR_B"] == "plain" and os.environ["TR_C"] == "shell"
     monkeypatch.delenv("TR_A")
     monkeypatch.delenv("TR_B")
+
+
+# -- effort variants, fuzzy matching, exclusive tiers -----------------------------------
+
+def test_split_effort_and_candidate_keys():
+    from tokenrouter.catalog.join import candidate_keys, split_effort
+
+    assert split_effort("claude-opus-5-5-high") == ("claude-opus-5-5", "high")
+    assert split_effort("gpt-6-luna-non-reasoning") == ("gpt-6-luna", "non-reasoning")
+    assert split_effort("gemini-4-argon") == ("gemini-4-argon", "")
+    keys = candidate_keys("mistralai/mistral-large-4-0")
+    assert "mistral-large-4" in keys
+    assert "deepseek-v4-flash" in candidate_keys("deepseek/deepseek-v4-flash-0731")
+    assert "gemini-3-1-flash-lite-preview" in candidate_keys("google/gemini-3.1-flash-lite")
+
+
+def test_join_scores_at_preferred_effort(settings, price_map):
+    from tests.conftest import aa_model, or_model
+
+    o = {"data": [or_model("anthropic/claude-opus-9", 5, 25), or_model("acme/solo", 1, 1),
+                  or_model("mistralai/mistral-large-4-0", 2, 6)]}
+    a = {"data": [aa_model("claude-opus-9", 60), aa_model("claude-opus-9-high", 55),
+                  aa_model("claude-opus-9-medium", 50), aa_model("solo", 30), aa_model("mistral-large-4", 41)]}
+    j = join(parse_openrouter(o), parse_artificial_analysis(a), price_map, {}, ALL_KEYS)
+    by_id = {r.model_id: r for r in j.rows}
+    assert by_id["anthropic/claude-opus-9"].intelligence_idx == 50          # medium, not max (60)
+    assert by_id["anthropic/claude-opus-9"].aa_slug == "claude-opus-9-medium"
+    assert by_id["acme/solo"].intelligence_idx == 30                        # only score available
+    assert by_id["mistralai/mistral-large-4-0"].intelligence_idx == 41      # '-0' suffix matched
+    j = join(parse_openrouter(o), parse_artificial_analysis(a), price_map, {}, ALL_KEYS, effort_preference=["high"])
+    assert {r.model_id: r for r in j.rows}["anthropic/claude-opus-9"].intelligence_idx == 55
+
+
+def test_exclusive_tiers_put_each_model_in_its_highest_tier(make_settings, openrouter_payload, aa_payload, price_map):
+    s = make_settings(catalog={"top_n": 3, "exclusive_tiers": True})
+    _, rows = _rows(s, openrouter_payload, aa_payload, price_map)
+    tiers_of = {}
+    for r in rows:
+        if r.tier:
+            tiers_of.setdefault(r.model_id, []).append(r.tier)
+    assert all(len(t) == 1 for t in tiers_of.values())
+    assert tiers_of["openai/gpt-9"] == ["reasoning"]          # also qualifies for balanced
+    assert [r.model_id for r in top_members(rows, "balanced", 3)] == ["google/gemini-9-flash", "anthropic/claude-haiku-9"]
+
+
+def test_snapshots_of_one_model_rank_after_distinct_models(settings):
+    base = dict(provider="p", input_usd_per_m=1, output_usd_per_m=1, context_window=200_000, supports_tools=True,
+                supports_json=True, callable=True)
+    rows = [CatalogRow(model_id="a/x", litellm_name="a/x", intelligence_idx=50, blended_price=1.0, aa_slug="x", **base),
+            CatalogRow(model_id="a/x-0731", litellm_name="a/x-0731", intelligence_idx=50, blended_price=1.0,
+                       aa_slug="x", **base),
+            CatalogRow(model_id="b/y", litellm_name="b/y", intelligence_idx=45, blended_price=1.0, aa_slug="y", **base)]
+    ranked = [r.model_id for r in top_members(assign_tiers(rows, settings), "balanced", 3)]
+    assert ranked == ["a/x", "b/y", "a/x-0731"]
+
+
+def test_tiers_file_requests_the_scored_effort(settings):
+    from tokenrouter.catalog.tiers_file import build_tiers_doc
+
+    base = dict(provider="p", input_usd_per_m=1, output_usd_per_m=1, context_window=200_000, supports_tools=True,
+                supports_json=True, callable=True, intelligence_idx=50, blended_price=1.0)
+    rows = assign_tiers([CatalogRow(model_id="a/x", litellm_name="a/x", aa_slug="x-medium", **base),
+                         CatalogRow(model_id="b/y", litellm_name="b/y", aa_slug="y", **base)], settings)
+    params = {d["litellm_params"]["model"]: d["litellm_params"]
+              for d in build_tiers_doc(rows, settings, "now", 1)["model_list"] if d["model_name"] == "balanced"}
+    assert params["a/x"]["reasoning_effort"] == "medium" and params["a/x"]["drop_params"] is True
+    assert "reasoning_effort" not in params["b/y"]

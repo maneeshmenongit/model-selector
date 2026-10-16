@@ -41,6 +41,8 @@ class Settings:
     output_weight: float = 0.25
     top_n: int = 3
     auto_apply: bool = False
+    score_effort_preference: tuple[str, ...] = ()
+    exclusive_tiers: bool = False
     tiers: dict[str, TierBand] = field(default_factory=dict)
     extra_members: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     jev_model: str = "jev-1.13.0"
@@ -171,6 +173,8 @@ def settings_from_dict(raw: dict[str, Any], root: Path) -> Settings:
         output_weight=catalog.get("output_weight", 0.25),
         top_n=catalog.get("top_n", 3),
         auto_apply=catalog.get("auto_apply", False),
+        score_effort_preference=tuple(catalog.get("score_effort_preference") or ()),
+        exclusive_tiers=bool(catalog.get("exclusive_tiers", False)),
         tiers=tiers,
         extra_members=raw.get("extra_members") or {},
         jev_model=decision.get("jev_model", "jev-1.13.0"),

@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 
+from tokenrouter.catalog.join import REQUESTABLE_EFFORTS, effort_of
 from tokenrouter.catalog.models import CatalogRow
 from tokenrouter.catalog.tiering import top_members
 from tokenrouter.config import Settings
@@ -19,7 +20,12 @@ def build_tiers_doc(rows: list[CatalogRow], settings: Settings, refreshed_at: st
     for tier in tiers:
         members = top_members(rows, tier, settings.top_n)
         for r in members:
-            model_list.append(_deployment(tier, r.rank_in_tier, r.litellm_name, {}, {
+            effort = effort_of(r.aa_slug)
+            # Call the model at the effort its score was measured at; drop_params lets
+            # providers without reasoning controls ignore it.
+            params = {"reasoning_effort": effort, "drop_params": True} if effort in REQUESTABLE_EFFORTS else {}
+            model_list.append(_deployment(tier, r.rank_in_tier, r.litellm_name, params, {
+                "aa_slug": r.aa_slug,
                 "model_id": r.model_id,
                 "blended_price": r.blended_price,
                 "usd_per_input_token": r.input_usd_per_m / 1e6,

@@ -41,9 +41,15 @@ scripts/install_launchd.sh # schedule it: 1st of each month, 06:00 (keys from ~/
 ```
 
 - Blended price = 0.75 × input + 0.25 × output (USD / 1M tokens).
-- A model joins every tier whose price ceiling, quality floor and capability requirements it meets;
-  inside a tier models are sorted by `intelligence_idx / blended_price`, ties to providers we hold a
-  key for, and the top 3 become primary + fallbacks (LiteLLM `order` 1–3).
+- A model joins the **highest** tier whose price ceiling, quality floor and capability requirements
+  it meets (`exclusive_tiers: true`), so moving a request up a tier always buys a more capable model.
+  Inside a tier models are sorted by `intelligence_idx / blended_price`, ties to providers we hold a
+  key for, and the top 3 distinct models become primary + fallbacks (LiteLLM `order` 1–3).
+- Artificial Analysis scores each reasoning-effort setting separately, and the plain slug is maximum
+  effort. Models are scored at **medium** effort when that variant exists
+  (`score_effort_preference`), and called at that effort (`reasoning_effort`), so the score matches
+  what you pay for.
+- Names are matched leniently: date suffixes (`-0731`), `-0`, and `-preview` variants.
 - The first refresh applies itself (nothing to review against). Later refreshes wait for
   `tokenrouter apply` unless `catalog.auto_apply: true`.
 - Models whose names don't match across the feeds are listed in the diff, not tiered. Map them in
@@ -132,6 +138,25 @@ uv run pytest
 
 Tests run offline: HTTP is mocked with `httpx.MockTransport` and model calls use LiteLLM
 `mock_response`.
+
+## Tier bands
+
+The design's starting floors (25 / 40 / 55) left the reasoning tier empty once models were scored at
+medium effort. After the first real refresh (2026-10-16), callable models had a median score of 21.9,
+a p90 of 41.1 and a maximum of 52.6, and the bands were retuned to:
+
+| Tier | Price ceiling (blended $/1M) | Quality floor |
+| --- | --- | --- |
+| fast | ≤ 0.50 | ≥ 25 |
+| balanced | ≤ 4.00 | ≥ 38 |
+| reasoning | none | ≥ 48 |
+
+## Empty answers
+
+A reasoning model can spend its whole `max_tokens` budget thinking and return nothing. An empty
+answer cut off at the limit (no tool call) counts as a failure: the router tries the next model in
+the chain and still bills the wasted call. If every model does this, `RoutingError` says to raise
+`max_tokens`.
 
 ## Decisions taken on the design's open questions
 

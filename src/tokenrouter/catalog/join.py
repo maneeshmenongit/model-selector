@@ -59,6 +59,59 @@ def build_native_index(price_map: dict[str, Any]) -> dict[tuple[str, str], str]:
     return index
 
 
+# Artificial Analysis lists one slug per reasoning-effort setting. The plain slug is
+# the model at its *maximum* effort, which overstates what a default call delivers.
+EFFORT_SUFFIXES = ("non-reasoning", "reasoning", "thinking", "adaptive", "minimal",
+                   "xhigh", "high", "medium", "low", "max")
+_EFFORT_RE = re.compile(r"-(" + "|".join(EFFORT_SUFFIXES) + r")$")
+# Efforts LiteLLM can request via `reasoning_effort`; other variants send nothing.
+REQUESTABLE_EFFORTS = ("low", "medium", "high")
+DEFAULT_EFFORT_PREFERENCE = ("medium", "high", "", "non-reasoning", "low", "xhigh", "reasoning",
+                             "thinking", "adaptive", "minimal", "max")
+_SHORT_DATE = re.compile(r"-\d{4}$")     # OpenRouter snapshot suffix, e.g. -0813
+
+
+def split_effort(slug: str) -> tuple[str, str]:
+    """'claude-opus-5-5-high' -> ('claude-opus-5-5', 'high'); plain slugs -> (slug, '')."""
+    m = _EFFORT_RE.search(slug)
+    return (slug[: m.start()], m.group(1)) if m else (slug, "")
+
+
+def build_aa_families(aa: Iterable[AAModel]) -> dict[str, dict[str, AAModel]]:
+    """normalized base slug -> {effort variant: model}; '' is the plain slug."""
+    families: dict[str, dict[str, AAModel]] = {}
+    for m in aa:
+        base, effort = split_effort(normalize(m.slug))
+        families.setdefault(base, {}).setdefault(effort, m)
+    return families
+
+
+def candidate_keys(model_id: str) -> list[str]:
+    """Names to try for an OpenRouter id, most specific first."""
+    n = normalize(model_id)
+    keys = [n, _DATE_SUFFIX.sub("", n), _SHORT_DATE.sub("", n)]
+    if n.endswith("-0"):                     # 'mistral-large-4-0' -> 'mistral-large-4'
+        keys.append(n[:-2])
+    keys.append(f"{n}-preview")              # 'gemini-3-1-flash-lite' -> '...-preview'
+    out: list[str] = []
+    for k in keys:
+        if k and k not in out:
+            out.append(k)
+    return out
+
+
+def pick_variant(family: dict[str, AAModel], preference: Iterable[str]) -> AAModel | None:
+    scored = {e: m for e, m in family.items() if m.intelligence_idx is not None}
+    for effort in preference:
+        if effort in scored:
+            return scored[effort]
+    return next(iter(scored.values()), None)
+
+
+def effort_of(aa_slug: str | None) -> str:
+    return split_effort(normalize(aa_slug))[1] if aa_slug else ""
+
+
 @dataclass
 class JoinResult:
     rows: list[CatalogRow] = field(default_factory=list)
@@ -74,11 +127,12 @@ def join(
     input_weight: float = 0.75,
     output_weight: float = 0.25,
     refreshed_at: str = "",
+    effort_preference: Iterable[str] = DEFAULT_EFFORT_PREFERENCE,
 ) -> JoinResult:
+    aa = list(aa)
     aa_by_slug = {m.slug: m for m in aa}
-    aa_by_norm: dict[str, AAModel] = {}
-    for m in aa_by_slug.values():
-        aa_by_norm.setdefault(normalize(m.slug), m)
+    families = build_aa_families(aa)
+    preference = tuple(effort_preference)
     native_index = build_native_index(price_map)
 
     result = JoinResult()
@@ -86,7 +140,11 @@ def join(
         alias = aliases.get(m.model_id) or {}
         if alias.get("skip"):
             continue
-        score = aa_by_slug.get(alias["aa_slug"]) if alias.get("aa_slug") else aa_by_norm.get(normalize(m.model_id))
+        if alias.get("aa_slug"):
+            score = aa_by_slug.get(alias["aa_slug"])
+        else:
+            family = next((families[k] for k in candidate_keys(m.model_id) if k in families), None)
+            score = pick_variant(family, preference) if family else None
         if score is None or score.intelligence_idx is None:
             result.unmatched.append(m.model_id)
             continue

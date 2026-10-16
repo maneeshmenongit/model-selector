@@ -13,7 +13,9 @@ import httpx
 
 from tokenrouter.catalog import sources
 from tokenrouter.catalog.diff import render_markdown, tier_diff
-from tokenrouter.catalog.join import NATIVE_PROVIDERS, OPENROUTER_KEY, join, load_aliases
+from tokenrouter.catalog.join import (
+    DEFAULT_EFFORT_PREFERENCE, NATIVE_PROVIDERS, OPENROUTER_KEY, join, load_aliases,
+)
 from tokenrouter.catalog.store import CatalogStore
 from tokenrouter.catalog.tiering import assign_tiers
 from tokenrouter.catalog.tiers_file import build_tiers_doc, write_tiers_file
@@ -73,6 +75,7 @@ def refresh(
     joined = join(
         openrouter, aa, price_map, load_aliases(settings.aliases_file), keys,
         settings.input_weight, settings.output_weight, refreshed_at,
+        effort_preference=settings.score_effort_preference or DEFAULT_EFFORT_PREFERENCE,
     )
     rows = assign_tiers(joined.rows, settings)
 
