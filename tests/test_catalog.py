@@ -150,3 +150,18 @@ def test_native_index_matches_undated_names():
 
     idx = build_native_index({"claude-sonnet-4-20250514": {"mode": "chat", "litellm_provider": "anthropic"}})
     assert idx[("anthropic", "claude-sonnet-4")] == "anthropic/claude-sonnet-4-20250514"
+
+
+def test_load_dotenv(tmp_path, monkeypatch):
+    from tokenrouter.config import load_dotenv
+
+    monkeypatch.delenv("TR_A", raising=False)
+    monkeypatch.delenv("TR_B", raising=False)
+    monkeypatch.setenv("TR_C", "shell")
+    f = tmp_path / ".env"
+    f.write_text('# keys\nexport TR_A="quoted value"\nTR_B=plain # comment\nTR_C=file\nTR_EMPTY=\nnot a line\n')
+    assert load_dotenv(f) == ["TR_A", "TR_B"]
+    import os
+    assert os.environ["TR_A"] == "quoted value" and os.environ["TR_B"] == "plain" and os.environ["TR_C"] == "shell"
+    monkeypatch.delenv("TR_A")
+    monkeypatch.delenv("TR_B")

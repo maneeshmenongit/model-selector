@@ -95,6 +95,33 @@ class Settings:
         return self.data_dir / "diffs"
 
 
+def load_dotenv(path: str | os.PathLike) -> list[str]:
+    """Load KEY=value lines into os.environ without overriding variables already set.
+
+    Returns the names it set. Handles `export KEY=...`, quotes and # comments.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return []
+    loaded = []
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):]
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        elif " #" in value:
+            value = value.split(" #", 1)[0].rstrip()
+        if key.isidentifier() and value and key not in os.environ:
+            os.environ[key] = value
+            loaded.append(key)
+    return loaded
+
+
 def _resolve(root: Path, p: str) -> Path:
     path = Path(p).expanduser()
     return path if path.is_absolute() else root / path

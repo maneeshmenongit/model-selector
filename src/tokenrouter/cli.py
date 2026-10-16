@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from tokenrouter.config import load_settings
+from tokenrouter.config import load_dotenv, load_settings
 
 
 def cmd_refresh(args, s) -> int:
@@ -130,6 +130,7 @@ def cmd_serve(args, s) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tokenrouter", description=__doc__)
     p.add_argument("--config", help="path to tokenrouter.yaml (default: $TOKENROUTER_CONFIG or config/)")
+    p.add_argument("--env-file", help="file of KEY=value API keys (default: <project>/.env)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     r = sub.add_parser("refresh", help="monthly catalog refresh: fetch feeds, re-rank tiers, write diff")
@@ -179,7 +180,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return args.fn(args, load_settings(args.config))
+    settings = load_settings(args.config)
+    # Keys from <project>/.env (or --env-file); variables already in the shell win.
+    load_dotenv(args.env_file or settings.root / ".env")
+    return args.fn(args, settings)
 
 
 if __name__ == "__main__":

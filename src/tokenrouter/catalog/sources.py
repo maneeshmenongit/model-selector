@@ -11,7 +11,8 @@ from typing import Any
 import httpx
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
-AA_MODELS_URL = "https://artificialanalysis.ai/api/v2/language/models"
+# Free-tier endpoint; /api/v2/language/models needs a Pro subscription.
+AA_MODELS_URL = "https://artificialanalysis.ai/api/v2/data/llms/models"
 LITELLM_PRICE_MAP_URL = (
     "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 )
