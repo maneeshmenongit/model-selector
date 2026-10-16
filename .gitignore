@@ -8,6 +8,8 @@ build/
 # runtime state: catalog DB, decision log, diffs, candidate tiers
 data/
 .env
+.env.*
+!.env.example
 *.env
 eval_sample*.csv
 .DS_Store
