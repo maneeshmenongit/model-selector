@@ -86,6 +86,7 @@ def build_aa_families(aa: Iterable[AAModel]) -> dict[str, dict[str, AAModel]]:
     return families
 
 
+# D4: provisional, pending design thread (lenient matching beyond the alias map).
 def candidate_keys(model_id: str) -> list[str]:
     """Names to try for an OpenRouter id, most specific first."""
     n = normalize(model_id)

@@ -12,19 +12,23 @@ catalog:
   output_weight: 0.25
   top_n: 3                            # primary + fallbacks kept per tier
   # Wait for `tokenrouter apply` after reviewing the diff (open question in the design).
+  # D6: provisional, pending design thread (docs_from_claude/INDEX.md)
   auto_apply: false
   # Each model joins only the highest tier it qualifies for, so moving a request up a
   # tier always buys a more capable model (with overlap, cheap strong models topped
   # both fast and balanced).
+  # D2: provisional, pending design thread
   exclusive_tiers: true
   # Artificial Analysis scores each reasoning-effort setting separately; the plain slug
   # is maximum effort. Score models at the first effort listed that exists, and call
   # them at that effort (reasoning_effort is sent for low/medium/high).
+  # D3: provisional, pending design thread. Q2 open: single-score models are not effort-matched.
   score_effort_preference: [medium, high, "", non-reasoning, low, xhigh, reasoning, thinking, adaptive, minimal, max]
 
 # Tuned on the first real refresh (2026-10-16), on medium-effort scores: callable
 # models' median 21.9, p90 41.1, max 52.6. The design's starting floors (25/40/55)
 # left reasoning empty. Order matters: it is the escalation order.
+# D1: provisional, pending design thread; depends on Q2 (bands tuned on mixed-effort scores).
 tiers:
   fast:
     max_blended_price: 0.50

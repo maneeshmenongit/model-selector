@@ -160,6 +160,9 @@ the chain and still bills the wasted call. If every model does this, `RoutingErr
 
 ## Decisions taken on the design's open questions
 
+These and every other change from the design are tracked as provisional (Q/D IDs) in
+[docs_from_claude/INDEX.md](docs_from_claude/INDEX.md) until the design thread replies.
+
 - **Auto-apply vs approval:** approval by default (`tokenrouter apply`); flip `catalog.auto_apply`.
 - **Coding tier:** not added; `coding_idx` and `agentic_idx` are stored in the catalog so a fourth
   tier can be added after the first refreshes.

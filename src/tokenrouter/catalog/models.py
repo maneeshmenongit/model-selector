@@ -17,7 +17,7 @@ class CatalogRow:
     supports_tools: bool
     supports_json: bool
     intelligence_idx: float | None = None
-    coding_idx: float | None = None
+    coding_idx: float | None = None          # D7: stored for a possible coding tier, pending design thread
     agentic_idx: float | None = None
     aa_slug: str | None = None
     blended_price: float = 0.0

@@ -97,6 +97,7 @@ class Settings:
         return self.data_dir / "diffs"
 
 
+# D8: provisional, pending design thread (design says keys from env only).
 def load_dotenv(path: str | os.PathLike) -> list[str]:
     """Load KEY=value lines into os.environ without overriding variables already set.
 

@@ -1,5 +1,7 @@
 """Local web app: watch how a request is routed and how the router behaves.
 
+D5: provisional, pending design thread (the design says Phase 1 has no UI).
+
 Standard library only (no new dependencies). Binds to 127.0.0.1. State-changing
 endpoints require the `X-Tokenrouter: 1` header and a localhost Host header, so a
 web page you visit can't trigger real (paid) model calls through it.
