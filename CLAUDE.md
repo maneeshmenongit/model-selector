@@ -1,6 +1,7 @@
 # tokenrouter — guide for Claude Code sessions
 
-Token-aware model router, Phase 1 of `docs_to_claude/base_architecture/tokenrouter-design.md`.
+Token-aware model router, Phase 1 of `docs_to_claude/base_architecture/phase 1/tokenrouter-design.md`, as amended by
+`docs_to_claude/base_architecture/phase 2/tokenrouter-phase1b-next-steps.md` (which wins on conflict).
 Jev (TypeSafe) picks the tier, LiteLLM picks the model inside it; a monthly refresh re-ranks tiers
 from OpenRouter prices and Artificial Analysis (AA) scores. README.md documents usage.
 

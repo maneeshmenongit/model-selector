@@ -1,6 +1,6 @@
 # tokenrouter
 
-Token-aware model router, Phase 1 of [the design](docs_to_claude/base_architecture/tokenrouter-design.md).
+Token-aware model router, Phase 1 of [the design](<docs_to_claude/base_architecture/phase 1/tokenrouter-design.md>), as amended by [Phase 1b](<docs_to_claude/base_architecture/phase 2/tokenrouter-phase1b-next-steps.md>).
 Jev picks the **tier**; LiteLLM picks the **model inside it**.
 
 | Layer | Runs | Module |
