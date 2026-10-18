@@ -17,12 +17,12 @@ class CatalogRow:
     supports_tools: bool
     supports_json: bool
     intelligence_idx: float | None = None
-    coding_idx: float | None = None          # D7: stored for a possible coding tier, pending design thread
+    coding_idx: float | None = None          # D7: stored for a possible coding tier (ratified; decided in Phase 2, P2-6)
     agentic_idx: float | None = None
     aa_slug: str | None = None
     blended_price: float = 0.0
     callable: bool = False      # we hold a key that can reach litellm_name
-    native_key: bool = False    # that key is the provider's own (tie-break preference)
+    native_key: bool = False    # that key is the provider's own (routing only; ranking never reads it)
     tier: str | None = None
     rank_in_tier: int | None = None
     refreshed_at: str = ""

@@ -64,7 +64,8 @@ def test_live_complete_logs_decision_and_cost(settings, fake_jev):
     assert row["jev_version"] == "jev-1.13.0" and row["decision_source"] == "jev"
     assert row["model"] == "openai/fast-1" and row["primary_model"] == "openai/fast-1"
     assert row["usd"] == pytest.approx(res.usd) and row["usd"] > 0
-    assert row["baseline_usd"] == pytest.approx(settings.baseline_cost(row["prompt_tokens"], row["completion_tokens"]))
+    assert row["baseline_model"] == "openai/baseline"
+    assert row["baseline_usd"] == pytest.approx(settings.baseline_for("default").cost(row["prompt_tokens"], row["completion_tokens"]))
     assert len(row["prompt_hash"]) == 16 and "love" not in str(row)
     assert row["decision_ms"] is not None and row["latency_ms"] >= row["decision_ms"]
 
@@ -104,6 +105,46 @@ def test_shadow_mode_logs_estimate_and_eval_pairs(settings, fake_jev):
     pair = log.conn.execute("SELECT * FROM eval_pairs WHERE request_id = ?", (res.request_id,)).fetchone()
     assert (pair["baseline_output"], pair["routed_output"], pair["routed_tier"]) == \
         ("baseline answer", "fast-1 answer", "fast")
+
+
+def test_baseline_is_recorded_per_agent(settings):
+    b = settings.baseline_for("agent-b")
+    assert (b.model, b.input_usd_per_m, b.output_usd_per_m) == ("openrouter/acme/agent-b-model", 0.5, 1.0)
+    assert b.cost(1_000_000, 1_000_000) == pytest.approx(1.5)
+    assert settings.baseline_for("no-baseline") is None
+
+
+def test_no_vendor_baseline_by_default(make_settings):
+    s = make_settings(projects={"default": {}})
+    assert s.baseline_for("default") is None and s.baseline_for("unknown-agent") is None
+
+
+def test_top_level_baseline_is_rejected(make_settings):
+    with pytest.raises(ValueError, match="projects"):
+        make_settings(baseline={"model": "acme/x", "input_usd_per_m": 1, "output_usd_per_m": 1})
+
+
+def test_live_request_without_a_baseline_logs_none(settings, fake_jev):
+    tr, log = _tr(settings, fake_jev)
+    res = tr.complete("Tag: I love it", project_id="no-baseline")
+    row = log.conn.execute("SELECT * FROM requests WHERE id = ?", (res.request_id,)).fetchone()
+    assert row["baseline_model"] is None and row["baseline_usd"] is None
+
+
+def test_shadow_uses_the_agents_own_baseline(settings, fake_jev):
+    tr, log = _tr(settings, fake_jev, mode="shadow",
+                  baseline_kwargs={"mock_response": "agent b answer", "api_key": "test"})
+    res = tr.complete("Tag: I love it", project_id="agent-b")
+    assert res.model == "openrouter/acme/agent-b-model" and res.text == "agent b answer"
+    row = log.conn.execute("SELECT * FROM requests WHERE id = ?", (res.request_id,)).fetchone()
+    assert row["baseline_usd"] == pytest.approx(
+        settings.baseline_for("agent-b").cost(row["prompt_tokens"], row["completion_tokens"]))
+
+
+def test_shadow_without_any_baseline_raises(settings, fake_jev):
+    tr, _ = _tr(settings, fake_jev, mode="shadow", baseline_kwargs={"mock_response": "x", "api_key": "test"})
+    with pytest.raises(ValueError, match="baseline"):
+        tr.complete("hi", project_id="no-baseline")
 
 
 def test_shadow_decision_failure_never_breaks_baseline(settings, fake_jev):

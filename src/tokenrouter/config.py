@@ -26,9 +26,21 @@ class TierBand:
 
 
 @dataclass(frozen=True)
+class Baseline:
+    """The model an agent uses today: what cost reduction is measured against (Q3)."""
+    model: str
+    input_usd_per_m: float
+    output_usd_per_m: float
+
+    def cost(self, prompt_tokens: int, completion_tokens: int) -> float:
+        return (self.input_usd_per_m * prompt_tokens + self.output_usd_per_m * completion_tokens) / 1e6
+
+
+@dataclass(frozen=True)
 class ProjectSettings:
     monthly_budget_usd: float | None = None
     send_raw_prompt: bool = True
+    baseline: Baseline | None = None
 
 
 @dataclass
@@ -45,6 +57,8 @@ class Settings:
     exclusive_tiers: bool = False
     tiers: dict[str, TierBand] = field(default_factory=dict)
     extra_members: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    local_model_prefixes: tuple[str, ...] = ("ollama/",)   # the only models `extra_members` may pin (N-T4)
+    config_path: Path | None = None
     jev_model: str = "jev-1.13.0"
     jev_timeout_s: float = 2.0
     default_tier: str = "balanced"
@@ -58,12 +72,10 @@ class Settings:
     timeout_s: float = 120
     max_output_tokens_default: int = 4096
     projects: dict[str, ProjectSettings] = field(default_factory=dict)
-    baseline_model: str = "anthropic/claude-sonnet-4-5"
-    baseline_input_per_m: float = 3.0
-    baseline_output_per_m: float = 15.0
 
-    def baseline_cost(self, prompt_tokens: int, completion_tokens: int) -> float:
-        return (self.baseline_input_per_m * prompt_tokens + self.baseline_output_per_m * completion_tokens) / 1e6
+    def baseline_for(self, project_id: str) -> Baseline | None:
+        """The agent's recorded baseline; None until one is recorded (no default model)."""
+        return self.project(project_id).baseline
 
     @property
     def tier_names(self) -> list[str]:
@@ -97,7 +109,7 @@ class Settings:
         return self.data_dir / "diffs"
 
 
-# D8: provisional, pending design thread (design says keys from env only).
+# D8: ratified by the design thread (keys from the environment or .env).
 def load_dotenv(path: str | os.PathLike) -> list[str]:
     """Load KEY=value lines into os.environ without overriding variables already set.
 
@@ -133,7 +145,16 @@ def _resolve(root: Path, p: str) -> Path:
 def load_settings(path: str | os.PathLike | None = None) -> Settings:
     cfg_path = Path(path or os.environ.get("TOKENROUTER_CONFIG") or DEFAULT_CONFIG).resolve()
     raw = yaml.safe_load(cfg_path.read_text()) or {}
-    return settings_from_dict(raw, root=cfg_path.parent.parent)
+    s = settings_from_dict(raw, root=cfg_path.parent.parent)
+    s.config_path = cfg_path
+    return s
+
+
+def _baseline(raw: dict[str, Any] | None) -> Baseline | None:
+    if not raw:
+        return None
+    return Baseline(model=raw["model"], input_usd_per_m=float(raw["input_usd_per_m"]),
+                    output_usd_per_m=float(raw["output_usd_per_m"]))
 
 
 def settings_from_dict(raw: dict[str, Any], root: Path) -> Settings:
@@ -141,7 +162,9 @@ def settings_from_dict(raw: dict[str, Any], root: Path) -> Settings:
     catalog = raw.get("catalog", {})
     decision = raw.get("decision", {})
     execution = raw.get("execution", {})
-    baseline = raw.get("baseline", {})
+    if "baseline" in raw:
+        raise ValueError("top-level `baseline:` is gone: record each agent's current model under "
+                         "projects.<project_id>.baseline (model, input_usd_per_m, output_usd_per_m)")
 
     tiers: dict[str, TierBand] = {}
     for name, band in (raw.get("tiers") or {}).items():
@@ -161,6 +184,7 @@ def settings_from_dict(raw: dict[str, Any], root: Path) -> Settings:
         pid: ProjectSettings(
             monthly_budget_usd=p.get("monthly_budget_usd"),
             send_raw_prompt=p.get("send_raw_prompt", True),
+            baseline=_baseline(p.get("baseline")),
         )
         for pid, p in (raw.get("projects") or {}).items()
     }
@@ -178,6 +202,7 @@ def settings_from_dict(raw: dict[str, Any], root: Path) -> Settings:
         exclusive_tiers=bool(catalog.get("exclusive_tiers", False)),
         tiers=tiers,
         extra_members=raw.get("extra_members") or {},
+        local_model_prefixes=tuple(catalog.get("local_model_prefixes") or ("ollama/",)),
         jev_model=decision.get("jev_model", "jev-1.13.0"),
         jev_timeout_s=decision.get("jev_timeout_s", 2.0),
         default_tier=decision.get("default_tier", "balanced"),
@@ -191,9 +216,6 @@ def settings_from_dict(raw: dict[str, Any], root: Path) -> Settings:
         timeout_s=execution.get("timeout_s", 120),
         max_output_tokens_default=execution.get("max_output_tokens_default", 4096),
         projects=projects,
-        baseline_model=baseline.get("model", "anthropic/claude-sonnet-4-5"),
-        baseline_input_per_m=float(baseline.get("input_usd_per_m", 3.0)),
-        baseline_output_per_m=float(baseline.get("output_usd_per_m", 15.0)),
     )
     if s.default_tier not in s.tiers:
         raise ValueError(f"default_tier {s.default_tier!r} is not a configured tier")

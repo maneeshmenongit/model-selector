@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections import Counter
+
+from tokenrouter.catalog.join import gateway
 from tokenrouter.catalog.models import CatalogRow
 from tokenrouter.catalog.tiering import top_members
+from tokenrouter.config import Settings
 
 PRICE_CHANGE_PCT = 10.0
 
@@ -56,12 +60,43 @@ def tier_diff(
     return lines
 
 
+def provider_share_lines(rows: list[CatalogRow], settings: Settings) -> list[str]:
+    """N-T6: per tier, where each member comes from and the evidence that placed it."""
+    out = ["Members per tier in rank order. Gateway: `openrouter` = called through OpenRouter, "
+           "`direct` = the provider's own API, `local` = a local model. Score per $ = score / blended price.", ""]
+    for tier in settings.tier_names:
+        out += [f"### {tier}", "", "| # | Model | Provider | Gateway | Score | $/M blended | Score per $ |",
+                "| --- | --- | --- | --- | --- | --- | --- |"]
+        providers: Counter[str] = Counter()
+        gateways: Counter[str] = Counter()
+        members = top_members(rows, tier, settings.top_n)
+        for r in members:
+            gw = gateway(r.litellm_name, settings.local_model_prefixes)
+            providers[r.provider] += 1
+            gateways[gw] += 1
+            out.append(f"| {r.rank_in_tier} | {r.model_id} | {r.provider} | {gw} | {r.intelligence_idx:g} "
+                       f"| {r.blended_price:.3f} | {r.quality_per_dollar:.1f} |")
+        for i, extra in enumerate(settings.extra_members.get(tier, []), start=len(members) + 1):
+            name = extra["litellm_name"]
+            prov = extra.get("provider") or name.split("/", 1)[0]
+            gw = gateway(name, settings.local_model_prefixes)
+            providers[prov] += 1
+            gateways[gw] += 1
+            out.append(f"| {i} | {name} | {prov} | {gw} | - | 0 | - (extra member) |")
+        if not members and not settings.extra_members.get(tier):
+            out.append("| - | EMPTY | | | | | |")
+        share = lambda c: ", ".join(f"{k} {v}" for k, v in c.most_common()) or "none"  # noqa: E731
+        out += ["", f"Providers: {share(providers)}. Gateways: {share(gateways)}.", ""]
+    return out
+
+
 def render_markdown(
     refreshed_at: str,
     lines: list[str],
     unmatched: list[str],
     applied: bool,
     feed_notes: list[str] | None = None,
+    provider_share: list[str] | None = None,
 ) -> str:
     out = [f"# Tier refresh {refreshed_at}", ""]
     out.append("Status: **applied**" if applied else "Status: **pending review** - run `tokenrouter apply` to promote")
@@ -70,6 +105,8 @@ def render_markdown(
         out += ["## Feed notes", "", *[f"- {n}" for n in feed_notes], ""]
     out += ["## Tier changes", ""]
     out += [f"- {line}" for line in lines] if lines else ["- No changes"]
+    if provider_share is not None:
+        out += ["", "## Provider share", "", *provider_share]
     out += ["", f"## Unmatched models ({len(unmatched)})", ""]
     out.append("Not auto-tiered. Add entries to `config/aliases.yaml` to include them.")
     out.append("")

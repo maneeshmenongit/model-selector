@@ -80,15 +80,6 @@ def test_tiering_bands_ranking_and_overlap(settings, openrouter_payload, aa_payl
     assert {r.tier for r in rows if r.model_id == "acme/tiny"} == {None}
 
 
-def test_ranking_tie_goes_to_native_key(settings):
-    base = dict(provider="p", input_usd_per_m=1, output_usd_per_m=1, context_window=200_000,
-                supports_tools=True, supports_json=True, intelligence_idx=50, blended_price=1.0, callable=True)
-    a = CatalogRow(model_id="a/x", litellm_name="openrouter/a/x", native_key=False, **base)
-    b = CatalogRow(model_id="b/y", litellm_name="b/y", native_key=True, **base)
-    ranked = top_members(assign_tiers([a, b], settings), "balanced", 3)
-    assert [r.model_id for r in ranked] == ["b/y", "a/x"]
-
-
 def _row(mid, tier, rank, price=1.0, q=50):
     return CatalogRow(model_id=mid, provider="p", litellm_name=mid, input_usd_per_m=price, output_usd_per_m=price,
                       context_window=1, supports_tools=True, supports_json=True, intelligence_idx=q,

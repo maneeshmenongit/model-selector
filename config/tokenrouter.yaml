@@ -12,23 +12,25 @@ catalog:
   output_weight: 0.25
   top_n: 3                            # primary + fallbacks kept per tier
   # Wait for `tokenrouter apply` after reviewing the diff (open question in the design).
-  # D6: provisional, pending design thread (docs_from_claude/INDEX.md)
+  # D6: ratified by the design thread (phase1b).
   auto_apply: false
   # Each model joins only the highest tier it qualifies for, so moving a request up a
   # tier always buys a more capable model (with overlap, cheap strong models topped
   # both fast and balanced).
-  # D2: provisional, pending design thread
+  # D2: ratified by the design thread (phase1b).
   exclusive_tiers: true
   # Artificial Analysis scores each reasoning-effort setting separately; the plain slug
   # is maximum effort. Score models at the first effort listed that exists, and call
   # them at that effort (reasoning_effort is sent for low/medium/high).
-  # D3: provisional, pending design thread. Q2 open: single-score models are not effort-matched.
+  # D3: ratified (phase1b). Single-score models get the Q2 normalization in N2 (todo).
+  # Prefixes of local models, the only ones `extra_members` may list.
+  local_model_prefixes: [ollama/]
   score_effort_preference: [medium, high, "", non-reasoning, low, xhigh, reasoning, thinking, adaptive, minimal, max]
 
 # Tuned on the first real refresh (2026-10-16), on medium-effort scores: callable
 # models' median 21.9, p90 41.1, max 52.6. The design's starting floors (25/40/55)
 # left reasoning empty. Order matters: it is the escalation order.
-# D1: provisional, pending design thread; depends on Q2 (bands tuned on mixed-effort scores).
+# D1: ratified provisionally (phase1b); to be re-derived as p50/p75/p90 percentiles in N2.
 tiers:
   fast:
     max_blended_price: 0.50
@@ -43,7 +45,8 @@ tiers:
     min_quality: 48
     requires: {min_context: 128000, tools: true}
 
-# Models added to a tier regardless of the feeds (after the ranked members).
+# Local models added to a tier after the ranked members. Only local models may be pinned
+# (provider neutrality, N-T4: `tokenrouter audit` rejects anything else).
 extra_members:
   fast:
     - litellm_name: ollama/qwen3:8b
@@ -71,15 +74,14 @@ execution:
   timeout_s: 120
   max_output_tokens_default: 4096
 
-# The fixed-model setup cost comparisons are made against (exit criterion: >= 40%
-# cheaper than all-Sonnet). Prices are explicit because the pinned LiteLLM price map
-# may not know the newest models.
-baseline:
-  model: anthropic/claude-sonnet-5-5
-  input_usd_per_m: 2.00     # OpenRouter /models, 2026-10-15
-  output_usd_per_m: 10.00
-
-# Per-project settings. `send_raw_prompt: false` sends Jev metadata + summary only.
+# Per-project (per-agent) settings. `send_raw_prompt: false` sends Jev metadata + summary only.
+# `baseline` is the model the agent uses today: cost reduction is measured against it
+# (exit criterion: >= 40% cheaper than each agent's current model). There is no default
+# baseline; an agent without one reports cost reduction as n/a. Prices are explicit because
+# the pinned LiteLLM price map may not know the newest models. The Video Intelligence
+# Pipeline agents get one entry each when the shadow run is set up (N5), e.g.
+#   <agent project_id>:
+#     baseline: {model: <litellm name>, input_usd_per_m: <x>, output_usd_per_m: <y>}
 projects:
   default:
     monthly_budget_usd: null

@@ -1,6 +1,6 @@
 """Local web app: watch how a request is routed and how the router behaves.
 
-D5: provisional, pending design thread (the design says Phase 1 has no UI).
+D5: ratified with scope frozen: no further UI work until the shadow run reports.
 
 Standard library only (no new dependencies). Binds to 127.0.0.1. State-changing
 endpoints require the `X-Tokenrouter: 1` header and a localhost Host header, so a
@@ -104,8 +104,6 @@ class App:
                 "blocked_data_classes": sorted(self.s.blocked_data_classes),
                 "max_output_tokens_default": self.s.max_output_tokens_default,
             },
-            "baseline": {"model": self.s.baseline_model, "input_usd_per_m": self.s.baseline_input_per_m,
-                         "output_usd_per_m": self.s.baseline_output_per_m},
             "projects": {pid: asdict(p) for pid, p in self.s.projects.items()} or {"default": {}},
             "blending": {"input_weight": self.s.input_weight, "output_weight": self.s.output_weight},
         }
@@ -186,7 +184,7 @@ class App:
                                      set(execution.get("fail") or []), result)
 
         result["decision"] = _decision_json(decision)
-        result["costs"] = self._costs(table, decision.prompt_tokens, expected_out)
+        result["costs"] = self._costs(table, project, decision.prompt_tokens, expected_out)
         result["expected_output_tokens"] = expected_out
         result["chain"] = self._chain(table, decision.tier)
         return result
@@ -247,15 +245,16 @@ class App:
         finally:
             tr.close(close_log=False)
 
-    def _costs(self, table: TierTable, prompt_tokens: int, out_tokens: int) -> dict[str, Any]:
+    def _costs(self, table: TierTable, project: str, prompt_tokens: int, out_tokens: int) -> dict[str, Any]:
         tiers = []
         for name in self.s.tier_names:
             p = table.primary(name)
             tiers.append({"tier": name, "model": p.litellm_name if p else None,
                           "usd": (p.input_cost_per_token * prompt_tokens + p.output_cost_per_token * out_tokens)
                           if p else None})
-        return {"tiers": tiers, "baseline": {"model": self.s.baseline_model,
-                                             "usd": self.s.baseline_cost(prompt_tokens, out_tokens)}}
+        b = self.s.baseline_for(project)
+        return {"tiers": tiers, "baseline": {"model": b.model if b else None,
+                                             "usd": b.cost(prompt_tokens, out_tokens) if b else None}}
 
     def _chain(self, table: TierTable, tier: str) -> list[dict[str, Any]]:
         """Order LiteLLM will try deployments in: the tier's members by rank, then each tier up."""

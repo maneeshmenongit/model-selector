@@ -5,6 +5,24 @@ Token-aware model router, Phase 1 of `docs_to_claude/base_architecture/phase 1/t
 Jev (TypeSafe) picks the tier, LiteLLM picks the model inside it; a monthly refresh re-ranks tiers
 from OpenRouter prices and Artificial Analysis (AA) scores. README.md documents usage.
 
+## Provider neutrality — non-negotiable
+- Ranking uses only: normalized quality score, blended price, and capability requirements
+  (context window, tools, JSON). Nothing else.
+- No provider or model name may appear in ranking logic, band logic, or tier config.
+  The only exception is `extra_members` for LOCAL models (ollama/*).
+- No Anthropic, OpenAI, Google or any other vendor gets a pinned slot, a weight,
+  a tie-break advantage, or a softer score correction than any other vendor.
+- Any recommendation in a close-out that names a specific provider or model to add, keep,
+  or favour must quote the user's own words asking for it. If there is no quote, do not make it.
+- Never write "the user wants X" unless the user wrote it. Cite the message.
+- Corrections (effort normalization, aliasing, de-dup) apply identically to every provider.
+- Bands are derived from the score distribution, never tuned to include or exclude a named model.
+- If the evidence says a vendor's model loses, it loses. Report it plainly.
+
+Enforced by checks N-T1…N-T6 (`tests/test_neutrality.py`, `tokenrouter audit`). Every close-out
+gets a **Neutrality check** section: N-T1…N-T6 pass/fail, provider share per tier, and each
+provider-naming recommendation with the user quote that justifies it (or "none").
+
 ## How this project is run
 
 - **Two threads.** Design happens in a separate claude.ai *design thread*; this repo is the *build*.

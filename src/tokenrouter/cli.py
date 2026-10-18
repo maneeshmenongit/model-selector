@@ -113,9 +113,16 @@ def cmd_eval(args, s) -> int:
 def cmd_audit(args, s) -> int:
     from tokenrouter.audit import audit
 
+    from tokenrouter.neutrality import run_all
+
     problems = audit()
     for p in problems:
         print(f"PROBLEM: {p}")
+    print("Provider neutrality:")
+    for r in run_all(s):
+        print(f"  {r.check} {'pass' if r.ok else 'FAIL'}: {r.detail}")
+        if not r.ok:
+            problems.append(r.check)
     print("audit clean" if not problems else f"{len(problems)} problem(s)")
     return 1 if problems else 0
 
@@ -167,7 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
     im.add_argument("file")
     ev.set_defaults(fn=cmd_eval)
 
-    sub.add_parser("audit", help="check pinned versions and .pth files").set_defaults(fn=cmd_audit)
+    sub.add_parser("audit", help="check pinned versions, .pth files and provider neutrality (N-T1..N-T6)").set_defaults(fn=cmd_audit)
 
     sv = sub.add_parser("serve", help="local web app: watch routing decisions, tiers and the request log")
     sv.add_argument("--port", type=int, default=8787)

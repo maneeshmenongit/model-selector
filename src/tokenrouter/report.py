@@ -55,7 +55,7 @@ class Report:
         return [
             ("Router adds < 600 ms p95 overhead", fmt(p95, "{:.0f} ms"),
              None if p95 is None else p95 < TARGET_P95_MS),
-            (">= 40% cost reduction vs baseline", fmt(red, "{:.1%}"),
+            (">= 40% cost reduction vs each agent's current model", fmt(red, "{:.1%}"),
              None if red is None else red >= TARGET_COST_REDUCTION),
             (f"Quality loss <= 5% on graded sample ({self.graded}/{TARGET_GRADED} graded)", fmt(loss, "{:.1%}"),
              None if loss is None or self.graded < TARGET_GRADED else loss <= TARGET_MAX_QUALITY_LOSS),

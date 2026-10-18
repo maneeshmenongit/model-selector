@@ -16,7 +16,7 @@ from pathlib import Path
 
 from tokenrouter.catalog.refresh import apply_candidate, refresh
 from tokenrouter.catalog.tiers_file import TierTable
-from tokenrouter.config import Settings
+from tokenrouter.config import Baseline, ProjectSettings, Settings
 
 # (id, input $/M, output $/M, context, tools, AA intelligence index or None)
 MONTH_1 = [
@@ -24,9 +24,9 @@ MONTH_1 = [
     ("acme/spark-mini", 0.10, 0.40, 1_000_000, True, 31),
     ("acme/spark", 0.30, 2.50, 1_000_000, True, 46),
     ("acme/spark-pro", 1.25, 10.00, 1_000_000, True, 61),
-    ("orbit/haiku-x", 0.80, 4.00, 200_000, True, 38),
-    ("orbit/sonnet-x", 3.00, 15.00, 200_000, True, 55),
-    ("orbit/opus-x", 15.00, 75.00, 200_000, True, 66),
+    ("orbit/o-lite", 0.80, 4.00, 200_000, True, 38),
+    ("orbit/o-mid", 3.00, 15.00, 200_000, True, 55),
+    ("orbit/o-max", 15.00, 75.00, 200_000, True, 66),
     ("lumen/l-small", 0.15, 0.60, 128_000, True, 29),
     ("lumen/l-medium", 0.40, 1.60, 400_000, True, 43),
     ("lumen/l-large", 2.00, 8.00, 400_000, True, 59),
@@ -43,7 +43,7 @@ MONTH_1 = [
 
 # Next month: a cheaper equal-quality fast model appears, one price cut, one model retired.
 MONTH_2_CHANGES = {
-    "add": [("orbit/haiku-x2", 0.08, 0.32, 200_000, True, 32)],
+    "add": [("orbit/o-lite-2", 0.08, 0.32, 200_000, True, 32)],
     "price": {"lumen/l-large": (1.25, 5.00)},
     "remove": ["nimbus/n1-chat"],
 }
@@ -85,10 +85,16 @@ def _month_2():
     return models + MONTH_2_CHANGES["add"]
 
 
+# The fictional agent's current model, so the demo can show cost vs baseline.
+DEMO_BASELINE = Baseline("openrouter/orbit/o-mid", 3.00, 15.00)
+
+
 def demo_settings(base: Settings) -> Settings:
     root = base.data_dir / "demo"
+    projects = {**base.projects, "default": ProjectSettings(baseline=DEMO_BASELINE),
+                "demo": ProjectSettings(baseline=DEMO_BASELINE)}
     return replace(base, data_dir=root / "data", tiers_file=root / "tiers.yaml",
-                   aliases_file=root / "aliases.yaml", auto_apply=False)
+                   aliases_file=root / "aliases.yaml", auto_apply=False, projects=projects)
 
 
 def build_demo(base: Settings, reset: bool = False) -> Settings:
@@ -145,7 +151,7 @@ def seed_log(s: Settings) -> None:
     rng = random.Random(7)
     for prompt, choice, conf in SAMPLE_REQUESTS * 3:
         jitter = max(0.05, min(0.99, conf + rng.uniform(-0.15, 0.1)))
-        tr = TokenRouter(s, mode="shadow", baseline_model=s.baseline_model, table=table, decision_log=log,
+        tr = TokenRouter(s, mode="shadow", table=table, decision_log=log,
                          router=router, jev=SimulatedJev(choice, jitter, {"needs_tools": rng.random() * 0.4}),
                          baseline_kwargs={"mock_response": "[simulated baseline answer]", "api_key": "simulated"})
         tr.complete(prompt, project_id="demo", max_tokens=rng.choice([200, 400, 800]))

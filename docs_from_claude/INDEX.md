@@ -17,6 +17,7 @@ Outbound files live in `docs_from_claude/`. Replies arrive in `docs_to_claude/di
 | D6 | deviation | Refreshes wait for `tokenrouter apply` approval (answers a design open question); the first refresh auto-applies | 2026-10-16-closeout-phase1-build.md | answered | base_architecture/phase 2/tokenrouter-phase1b-next-steps.md: ratified |
 | D7 | deviation | No coding tier yet; coding_idx and agentic_idx stored (answers a design open question) | 2026-10-16-closeout-phase1-build.md | answered | base_architecture/phase 2/tokenrouter-phase1b-next-steps.md: ratified |
 | D8 | deviation | Keys from the environment or a gitignored .env file, not the environment only | 2026-10-16-closeout-phase1-build.md | answered | base_architecture/phase 2/tokenrouter-phase1b-next-steps.md: ratified |
+| D9 | deviation | How N-T1..N-T6 are built: (a) N-T1/N-T2 run on the real catalog locally and in `tokenrouter audit`, and on a synthetic 210-row catalog in the committed tests (the real snapshot holds AA data and the repo is public); (b) N-T1 compares tiers by the fields ranking may read, so exact ties (ordered by the id hash) may swap; (c) N-T3 also scans comments and flags reads of `.provider`/`.native_key`/`.litellm_name`; (d) "CI" is `pytest`: the repo has no hosted CI | | unsent | |
 
 ## Direction items
 
@@ -24,11 +25,11 @@ Instructions from the design thread that answer no Q/D. Tracked here until repor
 
 | ID | From | Summary | Status |
 | --- | --- | --- | --- |
-| N1 | phase1b §1, §4 | Provider-neutrality guard: CLAUDE.md rule, checks N-T1…N-T6 in pytest and `tokenrouter audit`, remove vendor-specific config. P0, blocks all other work | in progress |
-| N2 | phase1b §4 | Effort normalization (Q2) and percentile bands (D1) | todo (after N1) |
+| N1 | phase1b §1, §4 | Provider-neutrality guard: CLAUDE.md rule, checks N-T1…N-T6 in pytest and `tokenrouter audit`, remove vendor-specific config. P0, blocks all other work | done 2026-10-17, not yet reported |
+| N2 | phase1b §4 | Effort normalization (Q2) and percentile bands (D1) | todo (next) |
 | N3 | phase1b §4 | Non-OpenRouter fallback per tier (Q4) | todo |
 | N4 | phase1b §4 | Alias the top 25 unmatched models | todo |
 | N5 | phase1b §4 | Shadow run on the Video Intelligence Pipeline (Q3); needs the project path and a grader choice from the user | todo, blocked |
 | N6 | phase1b §4 | Observe the 1 Nov 06:00 unattended refresh | todo (date-gated) |
 | N7 | phase1b §4 | Live failure tests: Jev, OpenRouter, one direct provider down | todo |
-| DC | phase1b §3 | Design corrections to `tokenrouter-design.md`: per-agent baseline, no vendor tier examples, N-T5 tie-break | todo (with N1) |
+| DC | phase1b §3 | Design corrections to `tokenrouter-design.md`: per-agent baseline, no vendor tier examples, N-T5 tie-break | done 2026-10-17, not yet reported |

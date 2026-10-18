@@ -24,8 +24,13 @@ BASE_CONFIG = {
         "blocked_data_classes": ["secrets", "credentials"],
     },
     "execution": {"num_retries": 0, "timeout_s": 10, "max_output_tokens_default": 1000},
-    "baseline": {"model": "openai/baseline", "input_usd_per_m": 3.0, "output_usd_per_m": 15.0},
-    "projects": {"default": {}, "capped": {"monthly_budget_usd": 0.01}, "private": {"send_raw_prompt": False}},
+    "projects": {
+        "default": {"baseline": {"model": "openai/baseline", "input_usd_per_m": 3.0, "output_usd_per_m": 15.0}},
+        "capped": {"monthly_budget_usd": 0.01},
+        "private": {"send_raw_prompt": False},
+        "agent-b": {"baseline": {"model": "openrouter/acme/agent-b-model", "input_usd_per_m": 0.5, "output_usd_per_m": 1.0}},
+        "no-baseline": {"baseline": None},
+    },
 }
 
 

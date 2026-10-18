@@ -50,7 +50,8 @@ class TokenRouter:
     """Route each request to the cheapest adequate tier.
 
     mode="live":   Jev picks the tier and LiteLLM serves it.
-    mode="shadow": the fixed `baseline_model` serves every request; the decision runs
+    mode="shadow": the agent's baseline serves every request (`baseline_model`, else the
+                   project's recorded baseline); the decision runs
                    alongside and is logged with the routed tier's estimated cost. With
                    `shadow_execute_rate` > 0 a sample is also sent to the routed tier and
                    both answers are stored for grading.
@@ -71,8 +72,6 @@ class TokenRouter:
     ):
         if mode not in ("live", "shadow"):
             raise ValueError("mode must be 'live' or 'shadow'")
-        if mode == "shadow" and not baseline_model:
-            raise ValueError("shadow mode needs baseline_model")
         self.s = settings or load_settings()
         self.mode = mode
         self.baseline_model = baseline_model
@@ -126,8 +125,10 @@ class TokenRouter:
             e.decision = decision
             raise
         self._fill_execution(rec, ex)
-        rec.baseline_model = self.s.baseline_model
-        rec.baseline_usd = self.s.baseline_cost(ex.prompt_tokens, ex.completion_tokens)
+        baseline = self.s.baseline_for(decide_kw["project_id"])
+        if baseline is not None:
+            rec.baseline_model = baseline.model
+            rec.baseline_usd = baseline.cost(ex.prompt_tokens, ex.completion_tokens)
         rec.latency_ms = (time.perf_counter() - t0) * 1000
         rid = self.log.write(rec)
         return RouteResult(rid, ex.response, decision, ex.tier, ex.model, ex.usd, rec.latency_ms, ex.fallback_used)
@@ -137,26 +138,31 @@ class TokenRouter:
     def _shadow(self, messages: list[dict], decide_kw: dict, kwargs: dict) -> RouteResult:
         import litellm
 
+        recorded = self.s.baseline_for(decide_kw["project_id"])
+        model = self.baseline_model or (recorded.model if recorded else None)
+        if not model:
+            raise ValueError(f"shadow mode needs a baseline: pass baseline_model or record "
+                             f"projects.{decide_kw['project_id']}.baseline in config")
         t0 = time.perf_counter()
         # The decision runs in parallel and can never break the baseline call.
         fut = self._pool.submit(self._safe_decide, messages, decide_kw)
-        resp = litellm.completion(model=self.baseline_model, messages=messages, **{**kwargs, **self.baseline_kwargs})
+        resp = litellm.completion(model=model, messages=messages, **{**kwargs, **self.baseline_kwargs})
         llm_ms = (time.perf_counter() - t0) * 1000
         decision = fut.result()
 
         usage = getattr(resp, "usage", None)
         pt = int(getattr(usage, "prompt_tokens", 0) or 0)
         ct = int(getattr(usage, "completion_tokens", 0) or 0)
-        if self.baseline_model == self.s.baseline_model:
-            baseline_usd = self.s.baseline_cost(pt, ct)
+        if recorded is not None and model == recorded.model:
+            baseline_usd = recorded.cost(pt, ct)
         else:
-            baseline_usd = usage_cost(self.table, self.baseline_model, pt, ct, resp)
+            baseline_usd = usage_cost(self.table, model, pt, ct, resp)
 
         rec = self._record(messages, decide_kw["project_id"], decision, mode="shadow")
-        rec.model = self.baseline_model
+        rec.model = model
         rec.prompt_tokens, rec.completion_tokens = pt, ct
         rec.usd = baseline_usd
-        rec.baseline_model, rec.baseline_usd = self.baseline_model, baseline_usd
+        rec.baseline_model, rec.baseline_usd = model, baseline_usd
         rec.llm_ms = llm_ms
         primary = self.table.primary(decision.tier) if not decision.needs_human else None
         if primary is not None:
@@ -173,10 +179,10 @@ class TokenRouter:
         rid = self.log.write(rec)
         if routed is not None:
             self.log.add_eval_pair(
-                rid, messages_text(messages), self.baseline_model, resp.choices[0].message.content or "",
+                rid, messages_text(messages), model, resp.choices[0].message.content or "",
                 decision.tier, routed.model, routed.response.choices[0].message.content or "",
             )
-        return RouteResult(rid, resp, decision, decision.tier, self.baseline_model, baseline_usd, rec.latency_ms)
+        return RouteResult(rid, resp, decision, decision.tier, model, baseline_usd, rec.latency_ms)
 
     def _safe_decide(self, messages: list[dict], decide_kw: dict) -> Decision:
         try:

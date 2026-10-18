@@ -26,7 +26,7 @@ _DATE_SUFFIX = re.compile(r"-(?:20\d{6}|20\d{2}-\d{2}-\d{2})$")
 
 
 def normalize(name: str) -> str:
-    """'google/Gemini-2.5-Flash_Lite:beta' -> 'gemini-2-5-flash-lite'."""
+    """'acme/Chat-2.5-Flash_Lite:beta' -> 'chat-2-5-flash-lite'."""
     s = name.lower().rsplit("/", 1)[-1].split(":", 1)[0]
     s = re.sub(r"[^a-z0-9]+", "-", s)
     return s.strip("-")
@@ -52,7 +52,7 @@ def build_native_index(price_map: dict[str, Any]) -> dict[tuple[str, str], str]:
         name = key if "/" in key else f"{prov}/{key}"
         norm = normalize(key)
         index.setdefault((prov, norm), name)
-        # 'claude-sonnet-4-20250514' should also answer for OpenRouter's 'claude-sonnet-4'.
+        # 'acme-chat-4-20250514' should also answer for OpenRouter's 'acme-chat-4'.
         undated = _DATE_SUFFIX.sub("", norm)
         if undated != norm:
             index.setdefault((prov, undated), name)
@@ -72,7 +72,7 @@ _SHORT_DATE = re.compile(r"-\d{4}$")     # OpenRouter snapshot suffix, e.g. -081
 
 
 def split_effort(slug: str) -> tuple[str, str]:
-    """'claude-opus-5-5-high' -> ('claude-opus-5-5', 'high'); plain slugs -> (slug, '')."""
+    """'acme-chat-5-high' -> ('acme-chat-5', 'high'); plain slugs -> (slug, '')."""
     m = _EFFORT_RE.search(slug)
     return (slug[: m.start()], m.group(1)) if m else (slug, "")
 
@@ -86,14 +86,14 @@ def build_aa_families(aa: Iterable[AAModel]) -> dict[str, dict[str, AAModel]]:
     return families
 
 
-# D4: provisional, pending design thread (lenient matching beyond the alias map).
+# D4: ratified by the design thread (lenient matching beyond the alias map).
 def candidate_keys(model_id: str) -> list[str]:
     """Names to try for an OpenRouter id, most specific first."""
     n = normalize(model_id)
     keys = [n, _DATE_SUFFIX.sub("", n), _SHORT_DATE.sub("", n)]
     if n.endswith("-0"):                     # 'mistral-large-4-0' -> 'mistral-large-4'
         keys.append(n[:-2])
-    keys.append(f"{n}-preview")              # 'gemini-3-1-flash-lite' -> '...-preview'
+    keys.append(f"{n}-preview")              # 'acme-chat-3-1-lite' -> '...-preview'
     out: list[str] = []
     for k in keys:
         if k and k not in out:
@@ -196,6 +196,15 @@ def _resolve_litellm(
         if name and env in keys:
             return name, True, True
     return via_openrouter, OPENROUTER_KEY in keys, False
+
+
+def gateway(litellm_name: str, local_prefixes: Iterable[str] = ("ollama/",)) -> str:
+    """How a deployment is reached: 'openrouter', 'local', or 'direct' (the provider's own API)."""
+    if litellm_name.startswith("openrouter/"):
+        return "openrouter"
+    if litellm_name.startswith(tuple(local_prefixes)):
+        return "local"
+    return "direct"
 
 
 def _env_for_litellm_name(name: str) -> str | None:

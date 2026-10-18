@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx
 
 from tokenrouter.catalog import sources
-from tokenrouter.catalog.diff import render_markdown, tier_diff
+from tokenrouter.catalog.diff import provider_share_lines, render_markdown, tier_diff
 from tokenrouter.catalog.join import (
     DEFAULT_EFFORT_PREFERENCE, NATIVE_PROVIDERS, OPENROUTER_KEY, join, load_aliases,
 )
@@ -98,7 +98,8 @@ def refresh(
         lines = tier_diff(previous, rows, settings.tier_names, settings.top_n)
         settings.diffs_dir.mkdir(parents=True, exist_ok=True)
         diff_path = settings.diffs_dir / f"{now.strftime('%Y-%m-%d')}-refresh-{refresh_id}.md"
-        diff_path.write_text(render_markdown(refreshed_at, lines, joined.unmatched, apply_now, notes))
+        diff_path.write_text(render_markdown(refreshed_at, lines, joined.unmatched, apply_now, notes,
+                                             provider_share_lines(rows, settings)))
     finally:
         store.close()
 

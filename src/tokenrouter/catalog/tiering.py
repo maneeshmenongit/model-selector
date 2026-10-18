@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Iterable
 
 from tokenrouter.catalog.models import CatalogRow
@@ -22,10 +23,16 @@ def qualifies(row: CatalogRow, band: TierBand) -> bool:
     return True
 
 
+def stable_hash(model_id: str) -> str:
+    return hashlib.sha256(model_id.encode()).hexdigest()
+
+
 def rank_key(row: CatalogRow) -> tuple:
-    # Best quality per dollar first; ties go to providers we hold a native key for,
-    # then higher absolute quality, then id for a stable order.
-    return (-row.quality_per_dollar, not row.native_key, -(row.intelligence_idx or 0), row.model_id)
+    # Best quality per dollar first. Ties (N-T5): lower blended price, then higher score,
+    # then larger context window, then a stable hash of the row id. Ranking never reads
+    # the provider, the route or which keys we hold (tests/test_neutrality.py).
+    return (-row.quality_per_dollar, row.blended_price, -(row.intelligence_idx or 0), -row.context_window,
+            stable_hash(row.model_id))
 
 
 def assign_tiers(rows: Iterable[CatalogRow], settings: Settings) -> list[CatalogRow]:

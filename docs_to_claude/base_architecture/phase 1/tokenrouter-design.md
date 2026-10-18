@@ -2,6 +2,8 @@
 
 Oct 14, 2026 · Maneesh
 
+> Amended 2026-10-17 with the design corrections in `phase 2/tokenrouter-phase1b-next-steps.md` §3 (per-agent baseline, no vendor tier examples, neutral tie-break). That document wins on any conflict.
+
 ## Recommendation
 
 **Extend, don't build from scratch.** No single repo does all three jobs we need, but two pieces cover most of it: LiteLLM for calling 100+ models with fallbacks and cost tracking, and Jev for the per-request tier decision. We build only the thin glue in the middle.
@@ -14,7 +16,7 @@ The system has three layers, each running on a different clock:
 | Decision | Every request | Pick the tier (fast / balanced / reasoning / human review) | Jev (TypeSafe AI) |
 | Execution | Every request | Call the best model in that tier, fall back on failure, log cost | LiteLLM Router (Python SDK) |
 
-The "range" is the tier: a price band plus a minimum quality score. Gemini Flash-Lite-class models land in the fast tier; when a cheaper model with an equal score appears, next month's refresh promotes it automatically.
+The "range" is the tier: a price band plus a minimum quality score. Cheap models that clear the fast tier's quality floor land in it; when a cheaper model with an equal score appears, next month's refresh promotes it automatically.
 
 ## Research: what already exists
 
@@ -79,16 +81,16 @@ A request passes code-enforced hard rules first, then one Jev call names the tie
 
 Each tier is a price ceiling plus a quality floor; the monthly refresh fills it with every model that qualifies, ranked by quality per dollar. The bands below are starting proposals to tune after the first refresh, not looked-up facts.
 
-| Tier | Blended price ceiling (USD / 1M tokens) | Quality floor (AA Intelligence Index) | Typical work | Example class |
-| --- | --- | --- | --- | --- |
-| fast | ≤ 0.50 | ≥ 25 | Extraction, tagging, short rewrites | Gemini Flash-Lite, Haiku-class, local qwen3 |
-| balanced | ≤ 4.00 | ≥ 40 | Summaries, RAG answers, standard code edits | Flash, Sonnet-class |
-| reasoning | no ceiling | ≥ 55 | Multi-step planning, hard debugging, synthesis | Opus / Fable-class |
-| human_review | — | — | Low-confidence or sensitive requests | Queue, no model |
+| Tier | Blended price ceiling (USD / 1M tokens) | Quality floor (AA Intelligence Index) | Typical work |
+| --- | --- | --- | --- |
+| fast | ≤ 0.50 | ≥ 25 | Extraction, tagging, short rewrites |
+| balanced | ≤ 4.00 | ≥ 40 | Summaries, RAG answers, standard code edits |
+| reasoning | no ceiling | ≥ 55 | Multi-step planning, hard debugging, synthesis |
+| human_review | — | — | Low-confidence or sensitive requests (queue, no model) |
 
 Blended price = 0.75 × input + 0.25 × output, so chatty-output models aren't flattered by a cheap input rate.
 
-**Ranking rule inside a tier:** drop models missing a required capability (tools, JSON, context length), then sort by `quality_index / blended_price`, keep the top 3 as primary + fallbacks. Ties go to the provider we already hold a key for.
+**Ranking rule inside a tier:** drop models missing a required capability (tools, JSON, context length), then sort by `quality_index / blended_price`, keep the top 3 as primary + fallbacks. Ties resolve by lower blended price, then higher score, then larger context window, then a stable hash of the catalog row id; never by provider or by which keys we hold.
 
 **Catalog row** (one per model per refresh, stored in SQLite/DuckDB):
 
@@ -125,7 +127,7 @@ Phase 1 is a Python library (`tokenrouter`) on the Mac Mini, used by one sandbox
 
 - [ ] Monthly refresh runs unattended and produces a reviewable diff
 - [ ] Router adds < 600 ms p95 overhead
-- [ ] ≥ 40% cost reduction vs all-Sonnet baseline on the shadow project
+- [ ] ≥ 40% cost reduction vs each agent's current model (recorded baseline) on the shadow project
 - [ ] Quality loss ≤ 5% on the graded sample
 - [ ] Zero unhandled failures when Jev or one provider is down
 

@@ -16,20 +16,20 @@ Jev picks the **tier**; LiteLLM picks the **model inside it**.
 uv venv -p 3.13
 uv pip install --require-hashes -r requirements.lock   # hash-verified, LiteLLM pinned to 1.103.0
 uv pip install --no-deps -e .
-tokenrouter audit                                      # pinned versions + unexpected .pth files
+tokenrouter audit                                      # pinned versions, .pth files, provider neutrality
 ```
 
 (`uv sync` works for development too; the lockfile is regenerated with
 `uv export --format requirements-txt --no-dev --no-emit-project > requirements.lock`.)
 
-Keys come from the environment only — see [.env.example](.env.example):
+Keys come from the environment or a gitignored `.env` at the project root (shell variables win) — see [.env.example](.env.example):
 
 | Variable | Used for |
 | --- | --- |
 | `ARTIFICIAL_ANALYSIS_API_KEY` | Quality indices for the monthly refresh (required for `refresh`) |
 | `TYPESAFE_API_KEY` | Jev decisions; without it every request takes the default tier (balanced) |
 | `OPENROUTER_API_KEY` | Reach any catalog model through OpenRouter |
-| `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, … | Call a provider directly; preferred over OpenRouter and wins ranking ties |
+| `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, … | Call that provider's models directly instead of through OpenRouter (routing only: ranking never looks at providers or keys) |
 
 ## Monthly refresh
 
@@ -70,12 +70,13 @@ print(res.text, res.tier, res.model, res.usd)
 tr.decide("…")                                       # dry run: decision only, nothing called or logged
 ```
 
-Shadow mode keeps your fixed model in charge and logs what the router would have done:
+Shadow mode keeps each agent's current model in charge and logs what the router would have done.
+Record that model per agent under `projects.<project_id>.baseline` in `config/tokenrouter.yaml`
+(or pass `baseline_model=`):
 
 ```python
-tr = TokenRouter(mode="shadow", baseline_model="anthropic/claude-sonnet-5-5",
-                 shadow_execute_rate=0.2)            # 20% also run on the routed tier, stored for grading
-res = tr.complete(messages, project_id="video-intel")  # res.response is always the baseline's
+tr = TokenRouter(mode="shadow", shadow_execute_rate=0.2)  # 20% also run on the routed tier, stored for grading
+res = tr.complete(messages, project_id="<agent>")       # res.response is always that agent's baseline's
 ```
 
 Request flow:
@@ -127,8 +128,25 @@ tokenrouter eval import eval_sample.csv
 ```
 
 The `report` command checks the exit criteria directly: p95 decision overhead < 600 ms, ≥ 40 %
-cheaper than the baseline (`baseline:` in config, Sonnet 5.5 at $2 / $10 per 1M tokens), quality
+cheaper than each agent's current model (`projects.<agent>.baseline` in config; n/a until recorded), quality
 loss ≤ 5 % over ≥ 100 graded pairs, and zero failures.
+
+## Provider neutrality
+
+Ranking reads only the quality score, blended price and capabilities; no provider gets a pinned
+slot, a weight or a tie-break. Six checks prove it, in `pytest` and in `tokenrouter audit`:
+
+| Check | Fails when |
+| --- | --- |
+| N-T1 label shuffle | Permuting provider/model names across catalog rows changes any tier |
+| N-T2 rename | Replacing every provider string with a random token changes any tier or rank |
+| N-T3 static | The ranking module or tier bands name a vendor, or ranking reads a provider/route field |
+| N-T4 config lint | `extra_members` pins a model that is not local (`catalog.local_model_prefixes`) |
+| N-T5 tie-break | Ties don't resolve by lower price → higher score → larger context → id hash |
+| N-T6 provider share | The refresh diff lacks the per-tier provider/gateway table with each member's evidence |
+
+N-T1/N-T2 run on the latest local refresh (`data/catalog.db`, not committed) and on a synthetic
+catalog in the test suite.
 
 ## Tests
 
@@ -160,8 +178,8 @@ the chain and still bills the wasted call. If every model does this, `RoutingErr
 
 ## Decisions taken on the design's open questions
 
-These and every other change from the design are tracked as provisional (Q/D IDs) in
-[docs_from_claude/INDEX.md](docs_from_claude/INDEX.md) until the design thread replies.
+These and every other change from the design are tracked (Q/D IDs) in
+[docs_from_claude/INDEX.md](docs_from_claude/INDEX.md); the design thread ratified D1–D8 in Phase 1b.
 
 - **Auto-apply vs approval:** approval by default (`tokenrouter apply`); flip `catalog.auto_apply`.
 - **Coding tier:** not added; `coding_idx` and `agentic_idx` are stored in the catalog so a fourth
