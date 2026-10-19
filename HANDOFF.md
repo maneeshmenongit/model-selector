@@ -23,9 +23,10 @@ the design thread; its reply will land in `docs_to_claude/direction/`.
 
 ## What the user said that isn't in code yet
 
-- **Keep some Anthropic models, like Sonnet 5.5, in a tier.** Today none makes a top 3: at medium
-  effort Sonnet scores 40.8 at $4.00 blended. This is ledger **Q1**; wait for the design thread's answer
-  before implementing.
+- ~~Keep some Anthropic models, like Sonnet 5.5, in a tier.~~ **Wrong: misattributed.** Corrected
+  2026-10-18. The user's words: "I feel that claude code is biased on using claude models even though
+  model selector advised differently. So, I have asked design thread to keep the model selector decision
+  intact". Q1 answered (d): leave out. See the CLAUDE.md neutrality rule.
 - **Gemini 4 Argon and Muse Spark 1.3 (newer, single-score models) are probably overstated.** Confirmed
   broader: all 9 ranked tier members have only AA's plain (max-effort) score, so they're compared with
   Anthropic's medium-effort scores. This is ledger **Q2**.
