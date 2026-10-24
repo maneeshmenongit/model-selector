@@ -11,22 +11,26 @@ import yaml
 from tokenrouter.catalog.join import REQUESTABLE_EFFORTS, effort_of
 from tokenrouter.catalog.models import CatalogRow
 from tokenrouter.catalog.tiering import top_members
-from tokenrouter.config import Settings
+from tokenrouter.config import Settings, TierBand
 
 
-def build_tiers_doc(rows: list[CatalogRow], settings: Settings, refreshed_at: str, refresh_id: int | None) -> dict:
+def build_tiers_doc(rows: list[CatalogRow], settings: Settings, refreshed_at: str, refresh_id: int | None,
+                    bands: dict[str, TierBand] | None = None) -> dict:
     model_list: list[dict[str, Any]] = []
     tiers = settings.tier_names
     for tier in tiers:
         members = top_members(rows, tier, settings.top_n)
         for r in members:
-            effort = effort_of(r.aa_slug)
+            # A max-effort score lowered to the medium footing (N2) is called at medium effort.
+            effort = "medium" if r.score_basis == "effort_unverified" else effort_of(r.aa_slug)
             # Call the model at the effort its score was measured at; drop_params lets
             # providers without reasoning controls ignore it.
             params = {"reasoning_effort": effort, "drop_params": True} if effort in REQUESTABLE_EFFORTS else {}
             model_list.append(_deployment(tier, r.rank_in_tier, r.litellm_name, params, {
                 "aa_slug": r.aa_slug,
                 "model_id": r.model_id,
+                "aa_score": r.aa_score,
+                "score_basis": r.score_basis,
                 "blended_price": r.blended_price,
                 "usd_per_input_token": r.input_usd_per_m / 1e6,
                 "usd_per_output_token": r.output_usd_per_m / 1e6,
@@ -49,9 +53,12 @@ def build_tiers_doc(rows: list[CatalogRow], settings: Settings, refreshed_at: st
                 "extra_member": True,
             }))
     fallbacks = [{tiers[i]: [tiers[i + 1]]} for i in range(len(tiers) - 1)]
+    bands = bands or settings.tiers
     return {
         "generated_at": refreshed_at,
         "refresh_id": refresh_id,
+        "bands": {t: {"min_quality": bands[t].min_quality, "max_blended_price": bands[t].max_blended_price}
+                  for t in tiers},
         "model_list": model_list,
         "router_settings": {"fallbacks": fallbacks},
     }

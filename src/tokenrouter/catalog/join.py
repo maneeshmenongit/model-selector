@@ -162,6 +162,8 @@ def join(
                 supports_tools=m.supports_tools,
                 supports_json=m.supports_json,
                 intelligence_idx=score.intelligence_idx,
+                aa_score=score.intelligence_idx,
+                supports_reasoning=m.supports_reasoning,
                 coding_idx=score.coding_idx,
                 agentic_idx=score.agentic_idx,
                 aa_slug=score.slug,

@@ -43,12 +43,18 @@ scripts/install_launchd.sh # schedule it: 1st of each month, 06:00 (keys from ~/
 - Blended price = 0.75 × input + 0.25 × output (USD / 1M tokens).
 - A model joins the **highest** tier whose price ceiling, quality floor and capability requirements
   it meets (`exclusive_tiers: true`), so moving a request up a tier always buys a more capable model.
-  Inside a tier models are sorted by `intelligence_idx / blended_price`, ties to providers we hold a
-  key for, and the top 3 distinct models become primary + fallbacks (LiteLLM `order` 1–3).
+  Inside a tier models are sorted by `intelligence_idx / blended_price`; ties go to the lower price,
+  then the higher score, then the larger context window, then a stable hash of the model id. The top 3
+  distinct models become primary + fallbacks (LiteLLM `order` 1–3).
 - Artificial Analysis scores each reasoning-effort setting separately, and the plain slug is maximum
   effort. Models are scored at **medium** effort when that variant exists
   (`score_effort_preference`), and called at that effort (`reasoning_effort`), so the score matches
-  what you pay for.
+  what you pay for. A model with only a plain score that takes a reasoning parameter is lowered by the
+  median max→medium gap across every family that publishes both, flagged `effort_unverified`, and
+  called at medium; one that takes no reasoning parameter keeps its plain score (`no_effort_param`).
+- Quality floors are derived each refresh: a percentile of callable models' normalized scores
+  (`catalog.band_percentiles`, default p50 / p75 / p90). Price ceilings are fixed in config. The diff
+  prints the gap statistics, the floors, and which ceilings bind.
 - Names are matched leniently: date suffixes (`-0731`), `-0`, and `-preview` variants.
 - The first refresh applies itself (nothing to review against). Later refreshes wait for
   `tokenrouter apply` unless `catalog.auto_apply: true`.

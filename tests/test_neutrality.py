@@ -200,3 +200,28 @@ def test_audit_command_fails_on_a_pinned_cloud_model(tmp_path, capsys):
     assert code == 1
     assert "N-T4 FAIL" in out and "openrouter/acme/x" in out
     assert "N-T5 pass" in out
+
+
+def test_nt3_scans_the_scoring_module():
+    assert "tokenrouter.catalog.scoring" in neutrality.NEUTRAL_MODULES
+
+
+def _vendor_soft_normalize(real):
+    """A correction that goes easier on one vendor: what N2's 'identically' rule forbids."""
+    def biased(rows, median_gap):
+        rows = list(rows)
+        soft = real([r for r in rows if r.provider == "anthropic"], median_gap / 2)
+        rest = real([r for r in rows if r.provider != "anthropic"], median_gap)
+        return soft + rest
+    return biased
+
+
+def test_nt1_nt2_run_the_whole_scoring_pipeline(make_settings, monkeypatch):
+    from tokenrouter.catalog import scoring
+
+    s = make_settings(catalog={"band_percentiles": {"fast": 50, "balanced": 75, "reasoning": 90}})
+    rows = [r.with_(supports_reasoning=True, aa_score=r.intelligence_idx) for r in synthetic_catalog()]
+    assert neutrality.label_shuffle_check(rows, s, median_gap=0.3) == []
+    assert neutrality.provider_rename_check(rows, s, median_gap=0.3) == []
+    monkeypatch.setattr(scoring, "normalize", _vendor_soft_normalize(scoring.normalize))
+    assert neutrality.provider_rename_check(rows, s, median_gap=0.3)

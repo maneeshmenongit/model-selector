@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS refreshes (
     n_models     INTEGER NOT NULL,
     n_unmatched  INTEGER NOT NULL,
     unmatched    TEXT NOT NULL DEFAULT '',
-    applied      INTEGER NOT NULL DEFAULT 0
+    applied      INTEGER NOT NULL DEFAULT 0,
+    effort_gap_median REAL
 );
 CREATE TABLE IF NOT EXISTS catalog (
     refresh_id       INTEGER NOT NULL REFERENCES refreshes(refresh_id),
@@ -35,7 +36,10 @@ CREATE TABLE IF NOT EXISTS catalog (
     native_key       INTEGER NOT NULL,
     tier             TEXT,
     rank_in_tier     INTEGER,
-    refreshed_at     TEXT NOT NULL
+    refreshed_at     TEXT NOT NULL,
+    aa_score         REAL,
+    supports_reasoning INTEGER NOT NULL DEFAULT 0,
+    score_basis      TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS catalog_refresh_tier ON catalog(refresh_id, tier, rank_in_tier);
 """
@@ -44,7 +48,14 @@ _COLS = [
     "model_id", "provider", "litellm_name", "input_usd_per_m", "output_usd_per_m",
     "context_window", "supports_tools", "supports_json", "intelligence_idx", "coding_idx",
     "agentic_idx", "aa_slug", "blended_price", "callable", "native_key", "tier",
-    "rank_in_tier", "refreshed_at",
+    "rank_in_tier", "refreshed_at", "aa_score", "supports_reasoning", "score_basis",
+]
+# Columns added after the first release: (table, column, type) for ALTER TABLE on older DBs.
+_MIGRATIONS = [
+    ("refreshes", "effort_gap_median", "REAL"),
+    ("catalog", "aa_score", "REAL"),
+    ("catalog", "supports_reasoning", "INTEGER NOT NULL DEFAULT 0"),
+    ("catalog", "score_basis", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 
@@ -54,15 +65,23 @@ class CatalogStore:
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        for table, col, typ in _MIGRATIONS:
+            have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+            if col not in have:
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+        self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()
 
-    def save(self, rows: list[CatalogRow], unmatched: list[str], refreshed_at: str) -> int:
+    def save(self, rows: list[CatalogRow], unmatched: list[str], refreshed_at: str,
+             effort_gap_median: float | None = None) -> int:
         with self.conn:
             cur = self.conn.execute(
-                "INSERT INTO refreshes (refreshed_at, n_models, n_unmatched, unmatched) VALUES (?, ?, ?, ?)",
-                (refreshed_at, len({r.model_id for r in rows}), len(unmatched), "\n".join(unmatched)),
+                "INSERT INTO refreshes (refreshed_at, n_models, n_unmatched, unmatched, effort_gap_median)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (refreshed_at, len({r.model_id for r in rows}), len(unmatched), "\n".join(unmatched),
+                 effort_gap_median),
             )
             refresh_id = cur.lastrowid
             self.conn.executemany(
@@ -70,6 +89,10 @@ class CatalogStore:
                 [(refresh_id, *(getattr(r, c) for c in _COLS)) for r in rows],
             )
         return refresh_id
+
+    def effort_gap_median(self, refresh_id: int) -> float | None:
+        row = self.conn.execute("SELECT effort_gap_median FROM refreshes WHERE refresh_id = ?", (refresh_id,)).fetchone()
+        return row[0] if row else None
 
     def mark_applied(self, refresh_id: int) -> None:
         with self.conn:
@@ -90,7 +113,7 @@ class CatalogStore:
         out = []
         for rec in cur:
             d = dict(rec)
-            for b in ("supports_tools", "supports_json", "callable", "native_key"):
+            for b in ("supports_tools", "supports_json", "callable", "native_key", "supports_reasoning"):
                 d[b] = bool(d[b])
             out.append(CatalogRow(**d))
         return out

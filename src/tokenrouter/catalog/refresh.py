@@ -12,12 +12,12 @@ from pathlib import Path
 import httpx
 
 from tokenrouter.catalog import sources
-from tokenrouter.catalog.diff import provider_share_lines, render_markdown, tier_diff
+from tokenrouter.catalog import scoring
+from tokenrouter.catalog.diff import provider_share_lines, render_markdown, scoring_lines, tier_diff
 from tokenrouter.catalog.join import (
     DEFAULT_EFFORT_PREFERENCE, NATIVE_PROVIDERS, OPENROUTER_KEY, join, load_aliases,
 )
 from tokenrouter.catalog.store import CatalogStore
-from tokenrouter.catalog.tiering import assign_tiers
 from tokenrouter.catalog.tiers_file import build_tiers_doc, write_tiers_file
 from tokenrouter.config import Settings
 
@@ -77,15 +77,16 @@ def refresh(
         settings.input_weight, settings.output_weight, refreshed_at,
         effort_preference=settings.score_effort_preference or DEFAULT_EFFORT_PREFERENCE,
     )
-    rows = assign_tiers(joined.rows, settings)
+    gap = scoring.effort_gap(aa)
+    rows, derived = scoring.tier_catalog(joined.rows, settings, gap.median)
 
     store = CatalogStore(settings.catalog_db)
     try:
         previous_id = store.latest_refresh_id(applied_only=True)
         previous = store.load(previous_id) if previous_id else None
-        refresh_id = store.save(rows, joined.unmatched, refreshed_at)
+        refresh_id = store.save(rows, joined.unmatched, refreshed_at, effort_gap_median=gap.median)
 
-        doc = build_tiers_doc(rows, settings, refreshed_at, refresh_id)
+        doc = build_tiers_doc(rows, settings, refreshed_at, refresh_id, bands=derived.bands)
         write_tiers_file(doc, settings.candidate_tiers_file)
 
         # Nothing to review against on the first run, so apply it directly.
@@ -99,7 +100,8 @@ def refresh(
         settings.diffs_dir.mkdir(parents=True, exist_ok=True)
         diff_path = settings.diffs_dir / f"{now.strftime('%Y-%m-%d')}-refresh-{refresh_id}.md"
         diff_path.write_text(render_markdown(refreshed_at, lines, joined.unmatched, apply_now, notes,
-                                             provider_share_lines(rows, settings)))
+                                             provider_share_lines(rows, settings),
+                                             scoring_lines(gap, derived, rows, settings)))
     finally:
         store.close()
 

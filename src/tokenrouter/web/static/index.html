@@ -1007,7 +1007,7 @@ function renderHowTo() {
     h("li", {}, "Each month the refresh pulls prices from OpenRouter and quality scores from Artificial Analysis, joined on model name (plus the alias map)."),
     h("li", {}, `Blended price = ${b.input_weight} × input + ${b.output_weight} × output, so models with cheap input but expensive output don't look cheaper than they are.`),
     h("li", {}, "A model joins every tier whose price ceiling, quality floor and capability requirements it meets, so bands can overlap."),
-    h("li", {}, `Inside a tier, models are sorted by quality per dollar; ties go to providers you hold a key for. The top ${CATALOG.top_n || 3} become the primary and its fallbacks.`),
+    h("li", {}, `Inside a tier, models are sorted by quality per dollar; ties go to the lower price, then the higher score, then the larger context window, then a stable hash of the model id. The top ${CATALOG.top_n || 3} become the primary and its fallbacks.`),
     h("li", {}, "Models with no quality score are listed as unmatched and never tiered automatically."),
     h("li", {}, "The diff shows what changed; `tokenrouter apply` promotes it to the live tiers file."));
 }

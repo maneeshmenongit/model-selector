@@ -55,6 +55,9 @@ class Settings:
     auto_apply: bool = False
     score_effort_preference: tuple[str, ...] = ()
     exclusive_tiers: bool = False
+    # N2: quality floor of each tier = this percentile of callable models' normalized scores.
+    # Empty -> the fixed `min_quality` in each tier is used.
+    band_percentiles: dict[str, float] = field(default_factory=dict)
     tiers: dict[str, TierBand] = field(default_factory=dict)
     extra_members: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     local_model_prefixes: tuple[str, ...] = ("ollama/",)   # the only models `extra_members` may pin (N-T4)
@@ -200,6 +203,7 @@ def settings_from_dict(raw: dict[str, Any], root: Path) -> Settings:
         auto_apply=catalog.get("auto_apply", False),
         score_effort_preference=tuple(catalog.get("score_effort_preference") or ()),
         exclusive_tiers=bool(catalog.get("exclusive_tiers", False)),
+        band_percentiles={k: float(v) for k, v in (catalog.get("band_percentiles") or {}).items()},
         tiers=tiers,
         extra_members=raw.get("extra_members") or {},
         local_model_prefixes=tuple(catalog.get("local_model_prefixes") or ("ollama/",)),

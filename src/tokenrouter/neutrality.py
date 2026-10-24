@@ -19,13 +19,14 @@ from typing import Any, Iterable
 
 import yaml
 
-from tokenrouter.catalog import tiering
+from tokenrouter.catalog import scoring, tiering
+from tokenrouter.catalog.join import effort_of
 from tokenrouter.catalog.models import CatalogRow
 from tokenrouter.catalog.tiering import stable_hash
 from tokenrouter.config import Settings
 
-# Modules whose logic decides tiers and ranks. N2's normalization and band code joins this list.
-NEUTRAL_MODULES = ("tokenrouter.catalog.tiering",)
+# Modules whose logic decides scores, bands, tiers and ranks.
+NEUTRAL_MODULES = ("tokenrouter.catalog.tiering", "tokenrouter.catalog.scoring")
 
 # Lower-case vendor, family and gateway names. Matched as whole words, so "meta" does not hit "metadata".
 VENDOR_TERMS = (
@@ -41,7 +42,8 @@ _TERM_RE = re.compile(r"(?<![a-z])(" + "|".join(re.escape(t) for t in VENDOR_TER
 # Row fields that identify a vendor or a route; ranking must not read them.
 LABEL_ATTRS = ("provider", "native_key", "litellm_name")
 # Fields ranking may read. Rows equal on all of them are indistinguishable to a neutral ranker.
-RANKING_FIELDS = ("intelligence_idx", "blended_price", "context_window", "supports_tools", "supports_json", "callable")
+RANKING_FIELDS = ("aa_score", "intelligence_idx", "supports_reasoning", "blended_price", "context_window",
+                  "supports_tools", "supports_json", "callable")
 
 __all__ = ["CheckResult", "run_all", "stable_hash"]
 
@@ -71,9 +73,25 @@ def latest_catalog(settings: Settings) -> list[CatalogRow]:
     return list(seen.values())
 
 
-def _tiers(rows: list[CatalogRow], settings: Settings) -> dict[str | None, list[CatalogRow]]:
+def latest_effort_gap(settings: Settings) -> float:
+    """The median effort gap the latest refresh normalized with (0 for refreshes before N2)."""
+    from tokenrouter.catalog.store import CatalogStore
+
+    if not settings.catalog_db.exists():
+        return 0.0
+    store = CatalogStore(settings.catalog_db)
+    try:
+        rid = store.latest_refresh_id()
+        return (store.effort_gap_median(rid) if rid else None) or 0.0
+    finally:
+        store.close()
+
+
+def _tiers(rows: list[CatalogRow], settings: Settings, median_gap: float) -> dict[str | None, list[CatalogRow]]:
+    """The whole pipeline a refresh runs: normalize scores, derive bands, tier and rank."""
     out: dict[str | None, list[CatalogRow]] = {}
-    for r in tiering.assign_tiers(rows, settings):
+    tiered, _ = scoring.tier_catalog(rows, settings, median_gap)
+    for r in tiered:
         out.setdefault(r.tier, []).append(r)
     for members in out.values():
         members.sort(key=lambda r: (r.rank_in_tier is None, r.rank_in_tier or 0, r.model_id))
@@ -81,7 +99,7 @@ def _tiers(rows: list[CatalogRow], settings: Settings) -> dict[str | None, list[
 
 
 def _signature(r: CatalogRow) -> tuple:
-    return tuple(getattr(r, f) for f in RANKING_FIELDS)
+    return (*(getattr(r, f) for f in RANKING_FIELDS), effort_of(r.aa_slug))
 
 
 def _by_fields(members: list[CatalogRow]) -> list[CatalogRow]:
@@ -95,20 +113,21 @@ def _label(r: CatalogRow) -> str:
     return f"{r.model_id} (q={r.intelligence_idx:g}, ${r.blended_price:.3f}/M)"
 
 
-def label_shuffle_check(rows: list[CatalogRow], settings: Settings, seeds: Iterable[int] = range(20)) -> list[str]:
+def label_shuffle_check(rows: list[CatalogRow], settings: Settings, seeds: Iterable[int] = range(20),
+                        median_gap: float = 0.0) -> list[str]:
     """N-T1: permute provider/model_id/litellm_name across rows; tiers must not change.
 
     Compared by the fields ranking may read: rows equal on all of them are true ties,
     which the id hash orders, so their order may swap without any label being read.
     """
     rows = list(rows)
-    base = _tiers(rows, settings)
+    base = _tiers(rows, settings, median_gap)
     problems = []
     for seed in seeds:
         labels = [(r.provider, r.model_id, r.litellm_name) for r in rows]
         random.Random(seed).shuffle(labels)
         shuffled = [r.with_(provider=p, model_id=m, litellm_name=n) for r, (p, m, n) in zip(rows, labels)]
-        got = _tiers(shuffled, settings)
+        got = _tiers(shuffled, settings, median_gap)
         for tier in sorted(set(base) | set(got), key=str):
             want, have = _by_fields(base.get(tier, [])), _by_fields(got.get(tier, []))
             key = lambda rows: [(r.rank_in_tier, _signature(r)) for r in rows]  # noqa: E731
@@ -122,16 +141,17 @@ def label_shuffle_check(rows: list[CatalogRow], settings: Settings, seeds: Itera
     return problems
 
 
-def provider_rename_check(rows: list[CatalogRow], settings: Settings, seeds: Iterable[int] = range(5)) -> list[str]:
+def provider_rename_check(rows: list[CatalogRow], settings: Settings, seeds: Iterable[int] = range(5),
+                          median_gap: float = 0.0) -> list[str]:
     """N-T2: replace every provider string with a random token; no tier or rank may change."""
     rows = list(rows)
-    base = {t: [(r.rank_in_tier, r.model_id) for r in m] for t, m in _tiers(rows, settings).items()}
+    base = {t: [(r.rank_in_tier, r.model_id) for r in m] for t, m in _tiers(rows, settings, median_gap).items()}
     problems = []
     for seed in seeds:
         rng = random.Random(seed)
         tokens = {p: f"vendor-{rng.getrandbits(32):08x}" for p in sorted({r.provider for r in rows})}
         renamed = [r.with_(provider=tokens[r.provider]) for r in rows]
-        got = {t: [(r.rank_in_tier, r.model_id) for r in m] for t, m in _tiers(renamed, settings).items()}
+        got = {t: [(r.rank_in_tier, r.model_id) for r in m] for t, m in _tiers(renamed, settings, median_gap).items()}
         for tier in sorted(set(base) | set(got), key=str):
             if base.get(tier) != got.get(tier):
                 problems.append(f"seed {seed}: tier {tier} changed: {base.get(tier)} -> {got.get(tier)}")
@@ -220,10 +240,14 @@ def run_all(
     rows: list[CatalogRow] | None = None,
     diff_text: str | None = None,
     raw_config: dict[str, Any] | None = None,
+    median_gap: float | None = None,
 ) -> list[CheckResult]:
     """Every check, pass or fail, for `tokenrouter audit` and the close-out's neutrality section."""
     if rows is None:
         rows = latest_catalog(settings)
+        if median_gap is None:
+            median_gap = latest_effort_gap(settings)
+    gap = median_gap or 0.0
     if raw_config is None and settings.config_path and settings.config_path.exists():
         raw_config = yaml.safe_load(settings.config_path.read_text()) or {}
     if diff_text is None:
@@ -234,8 +258,10 @@ def run_all(
 
     out = []
     if rows:
-        out.append(result("N-T1", label_shuffle_check(rows, settings), f"{len(rows)} rows, 20 shuffles, tiers unchanged"))
-        out.append(result("N-T2", provider_rename_check(rows, settings), f"{len(rows)} rows, 5 renames, tiers and ranks unchanged"))
+        out.append(result("N-T1", label_shuffle_check(rows, settings, median_gap=gap),
+                          f"{len(rows)} rows, 20 shuffles through normalize -> bands -> rank, tiers unchanged"))
+        out.append(result("N-T2", provider_rename_check(rows, settings, median_gap=gap),
+                          f"{len(rows)} rows, 5 renames, tiers and ranks unchanged"))
     else:
         out += [CheckResult(c, False, "no catalog snapshot; run `tokenrouter refresh`") for c in ("N-T1", "N-T2")]
     out.append(result("N-T3", static_check() + tier_config_check(raw_config or {}),

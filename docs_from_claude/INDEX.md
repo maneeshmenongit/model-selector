@@ -10,6 +10,7 @@ Outbound files live in `docs_from_claude/`. Replies arrive in `docs_to_claude/di
 | Q3 | question | Phase 1 shadow target project (design suggested the Video Intelligence Pipeline). Blocks plan step 5 and exit criteria 3-4 | 2026-10-16-closeout-phase1-build.md | answered | base_architecture/phase 2/tokenrouter-phase1b-next-steps.md: (a) Video Intelligence Pipeline; baseline = each agent's current model, recorded per agent in config |
 | Q4 | question | Require at least one non-OpenRouter member per tier? 8 of 9 ranked cloud members are called through OpenRouter | 2026-10-16-closeout-phase1-build.md | answered | base_architecture/phase 2/tokenrouter-phase1b-next-steps.md: (a) yes, ≥1 member per tier reachable without OpenRouter, chosen by the same ranking (N3) |
 | Q5 | question | Who grades the ≥100 shadow pairs: Jev, an LLM judge, the user, or Jev calibrated against 20 user-graded pairs (build recommends). Blocks N5 grading | 2026-10-18-direction-grader-and-q1-correction.md | open | |
+| Q6 | question | N2 percentile floors p50/p75/p90 give reasoning floor 39.8 and a top-3 mean of 40.4 (balanced 33.6); keep, raise to p60/p85/p95 (build recommends), p60/p85/p97, or change the population/ranking. Blocks applying refresh 4 | 2026-10-24-direction-n2-bands.md | open | |
 | D1 | deviation | Quality floors 25/40/55 changed to 25/38/48 (price ceilings unchanged: $0.50 / $4.00 / none) | 2026-10-16-closeout-phase1-build.md | answered | base_architecture/phase 2/tokenrouter-phase1b-next-steps.md: ratified provisionally; re-derive as p50/p75/p90 after Q2 (N2) |
 | D2 | deviation | Exclusive tiers: each model joins only its highest qualifying tier | 2026-10-16-closeout-phase1-build.md | answered | base_architecture/phase 2/tokenrouter-phase1b-next-steps.md: ratified |
 | D3 | deviation | Score at medium effort when AA publishes it, and send matching reasoning_effort on calls | 2026-10-16-closeout-phase1-build.md | answered | base_architecture/phase 2/tokenrouter-phase1b-next-steps.md: ratified |
@@ -19,6 +20,8 @@ Outbound files live in `docs_from_claude/`. Replies arrive in `docs_to_claude/di
 | D7 | deviation | No coding tier yet; coding_idx and agentic_idx stored (answers a design open question) | 2026-10-16-closeout-phase1-build.md | answered | base_architecture/phase 2/tokenrouter-phase1b-next-steps.md: ratified |
 | D8 | deviation | Keys from the environment or a gitignored .env file, not the environment only | 2026-10-16-closeout-phase1-build.md | answered | base_architecture/phase 2/tokenrouter-phase1b-next-steps.md: ratified |
 | D9 | deviation | How N-T1..N-T6 are built: (a) N-T1/N-T2 run on the real catalog locally and in `tokenrouter audit`, and on a synthetic 210-row catalog in the committed tests (the real snapshot holds AA data and the repo is public); (b) N-T1 compares tiers by the fields ranking may read, so exact ties (ordered by the id hash) may swap; (c) N-T3 also scans comments and flags reads of `.provider`/`.native_key`/`.litellm_name`; (d) "CI" is `pytest`: the repo has no hosted CI | | unsent | |
+| D10 | deviation | `effort_unverified` rows are called with `reasoning_effort: medium` | 2026-10-24-direction-n2-bands.md | open | |
+| D11 | deviation | Normalization covers every row scored from a plain slug, not only single-slug families | 2026-10-24-direction-n2-bands.md | open | |
 
 ## Direction items
 
@@ -27,7 +30,7 @@ Instructions from the design thread that answer no Q/D. Tracked here until repor
 | ID | From | Summary | Status |
 | --- | --- | --- | --- |
 | N1 | phase1b §1, §4 | Provider-neutrality guard: CLAUDE.md rule, checks N-T1…N-T6 in pytest and `tokenrouter audit`, remove vendor-specific config. P0, blocks all other work | done 2026-10-17, not yet reported |
-| N2 | phase1b §4 | Effort normalization (Q2) and percentile bands (D1) | todo (next) |
+| N2 | phase1b §4 | Effort normalization (Q2) and percentile bands (D1) | built 2026-10-24; refresh 4 not applied, waits on Q6 |
 | N3 | phase1b §4 | Non-OpenRouter fallback per tier (Q4) | todo |
 | N4 | phase1b §4 | Alias the top 25 unmatched models | todo |
 | N5 | phase1b §4 | Shadow run on the Video Intelligence Pipeline (Q3); needs the project path and a grader choice from the user | todo, blocked |

@@ -32,6 +32,7 @@ class OpenRouterModel:
     context_window: int
     supports_tools: bool
     supports_json: bool
+    supports_reasoning: bool = False   # accepts a reasoning-effort parameter
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,10 @@ def _per_m(value: Any) -> float | None:
         return float(value) * 1_000_000
     except (TypeError, ValueError):
         return None
+
+
+# OpenRouter parameters that set reasoning effort (`include_reasoning` only returns the trace).
+REASONING_PARAMS = {"reasoning", "reasoning_effort"}
 
 
 def parse_openrouter(payload: dict[str, Any]) -> list[OpenRouterModel]:
@@ -78,6 +83,7 @@ def parse_openrouter(payload: dict[str, Any]) -> list[OpenRouterModel]:
                 context_window=int(ctx),
                 supports_tools="tools" in params,
                 supports_json=bool(params & {"response_format", "structured_outputs"}),
+                supports_reasoning=bool(params & REASONING_PARAMS),
             )
         )
     return out

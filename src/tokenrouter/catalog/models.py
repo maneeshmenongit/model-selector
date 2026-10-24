@@ -27,6 +27,11 @@ class CatalogRow:
     rank_in_tier: int | None = None
     refreshed_at: str = ""
     extra_params: dict[str, Any] | None = None  # litellm_params for extra members
+    aa_score: float | None = None    # AA's published score for aa_slug; intelligence_idx is the normalized one
+    supports_reasoning: bool = False  # accepts a reasoning-effort parameter
+    # How intelligence_idx was reached (N2): "measured" (AA's score at the effort we call at),
+    # "effort_unverified" (max-effort score lowered by the median gap), "no_effort_param" (plain score kept).
+    score_basis: str = ""
 
     @property
     def quality_per_dollar(self) -> float:

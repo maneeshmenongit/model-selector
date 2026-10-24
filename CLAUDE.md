@@ -40,7 +40,7 @@ provider-naming recommendation with the user quote that justifies it (or "none")
 
 ```sh
 uv sync                    # Python 3.13 venv; supply-chain install: see README "Setup"
-uv run pytest              # ~61 tests, offline (httpx.MockTransport, LiteLLM mock_response)
+uv run pytest              # ~100 tests, offline (httpx.MockTransport, LiteLLM mock_response)
 uv run tokenrouter refresh # live feeds -> data/tiers.candidate.yaml + data/diffs/*.md (needs keys)
 uv run tokenrouter apply   # promote the candidate to config/tiers.yaml (tracked in git)
 uv run tokenrouter tiers | decide "…" | ask "…" | report | eval export/import | audit

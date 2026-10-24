@@ -19,30 +19,31 @@ catalog:
   # both fast and balanced).
   # D2: ratified by the design thread (phase1b).
   exclusive_tiers: true
+  # Tier quality floor = this percentile of callable models' normalized scores (N2).
+  band_percentiles: {fast: 50, balanced: 75, reasoning: 90}
   # Artificial Analysis scores each reasoning-effort setting separately; the plain slug
   # is maximum effort. Score models at the first effort listed that exists, and call
   # them at that effort (reasoning_effort is sent for low/medium/high).
-  # D3: ratified (phase1b). Single-score models get the Q2 normalization in N2 (todo).
+  # D3: ratified (phase1b). A model scored from its plain slug (max effort) that takes a
+  # reasoning parameter is lowered by the median max->medium gap across every AA family that
+  # publishes both, and called at medium effort (Q2, N2). The same rule for every provider.
   # Prefixes of local models, the only ones `extra_members` may list.
   local_model_prefixes: [ollama/]
   score_effort_preference: [medium, high, "", non-reasoning, low, xhigh, reasoning, thinking, adaptive, minimal, max]
 
-# Tuned on the first real refresh (2026-10-16), on medium-effort scores: callable
-# models' median 21.9, p90 41.1, max 52.6. The design's starting floors (25/40/55)
-# left reasoning empty. Order matters: it is the escalation order.
-# D1: ratified provisionally (phase1b); to be re-derived as p50/p75/p90 percentiles in N2.
+# Quality floors are not set here: each refresh derives them from the normalized scores of
+# callable models (catalog.band_percentiles) and prints them in the diff. Price ceilings are
+# fixed. Order matters: it is the escalation order.
+# D1: ratified provisionally, re-derived as percentiles (phase1b, N2).
 tiers:
   fast:
     max_blended_price: 0.50
-    min_quality: 25
     requires: {min_context: 32000}
   balanced:
     max_blended_price: 4.00
-    min_quality: 38
     requires: {min_context: 128000, tools: true}
   reasoning:
     max_blended_price: null           # no ceiling
-    min_quality: 48
     requires: {min_context: 128000, tools: true}
 
 # Local models added to a tier after the ranked members. Only local models may be pinned

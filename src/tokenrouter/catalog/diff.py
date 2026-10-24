@@ -74,7 +74,8 @@ def provider_share_lines(rows: list[CatalogRow], settings: Settings) -> list[str
             gw = gateway(r.litellm_name, settings.local_model_prefixes)
             providers[r.provider] += 1
             gateways[gw] += 1
-            out.append(f"| {r.rank_in_tier} | {r.model_id} | {r.provider} | {gw} | {r.intelligence_idx:g} "
+            basis = f" ({r.score_basis})" if r.score_basis else ""
+            out.append(f"| {r.rank_in_tier} | {r.model_id} | {r.provider} | {gw} | {r.intelligence_idx:g}{basis} "
                        f"| {r.blended_price:.3f} | {r.quality_per_dollar:.1f} |")
         for i, extra in enumerate(settings.extra_members.get(tier, []), start=len(members) + 1):
             name = extra["litellm_name"]
@@ -90,6 +91,40 @@ def provider_share_lines(rows: list[CatalogRow], settings: Settings) -> list[str
     return out
 
 
+def scoring_lines(gap, derived, rows: list[CatalogRow], settings: Settings) -> list[str]:
+    """N2 evidence: the effort gap, how each score was reached, and the derived bands."""
+    basis = Counter(r.score_basis for r in {r.model_id: r for r in rows if r.callable}.values())
+    out = ["## Effort normalization", "",
+           f"Artificial Analysis's plain score is a model at maximum effort. {gap.count} families publish both a "
+           f"plain and a medium score: median gap {gap.median:.1%} (p25 {gap.p25:.1%}, p75 {gap.p75:.1%}).",
+           "",
+           f"Callable models by score basis: {basis.get('measured', 0)} `measured` (AA's score at the effort we call at), "
+           f"{basis.get('effort_unverified', 0)} `effort_unverified` (plain score x (1 - {gap.median:.1%}), "
+           f"called with reasoning_effort=medium), {basis.get('no_effort_param', 0)} `no_effort_param` "
+           f"(plain score kept: the model takes no reasoning parameter). The same rule applies to every provider.",
+           ""]
+    if gap.families:
+        out += ["| Family | Plain (max) | Medium | Gap |", "| --- | --- | --- | --- |"]
+        out += [f"| {f} | {p:g} | {m:g} | {g:.1%} |" for f, p, m, g in gap.families]
+        out.append("")
+    out += ["## Derived bands", ""]
+    if derived.floors is None:
+        out.append("Fixed quality floors from config (`catalog.band_percentiles` is not set).")
+    else:
+        out.append(f"Quality floor = a percentile of {derived.n_scores} callable models' normalized scores "
+                   "(one per score entry). Price ceilings are unchanged.")
+    out += ["", "| Tier | Percentile | Quality floor | Price ceiling ($/M) | Clear the floor, over the ceiling |",
+            "| --- | --- | --- | --- | --- |"]
+    for tier in settings.tier_names:
+        b = derived.bands[tier]
+        pct = f"p{settings.band_percentiles[tier]:g}" if derived.floors and tier in settings.band_percentiles else "fixed"
+        ceiling = "none" if b.max_blended_price is None else f"{b.max_blended_price:.2f}"
+        binds = derived.ceiling_excludes.get(tier)
+        out.append(f"| {tier} | {pct} | {b.min_quality:g} | {ceiling} | "
+                   f"{'-' if binds is None else (f'{binds} (ceiling binds)' if binds else '0')} |")
+    return out + [""]
+
+
 def render_markdown(
     refreshed_at: str,
     lines: list[str],
@@ -97,12 +132,15 @@ def render_markdown(
     applied: bool,
     feed_notes: list[str] | None = None,
     provider_share: list[str] | None = None,
+    scoring: list[str] | None = None,
 ) -> str:
     out = [f"# Tier refresh {refreshed_at}", ""]
     out.append("Status: **applied**" if applied else "Status: **pending review** - run `tokenrouter apply` to promote")
     out.append("")
     if feed_notes:
         out += ["## Feed notes", "", *[f"- {n}" for n in feed_notes], ""]
+    if scoring:
+        out += scoring
     out += ["## Tier changes", ""]
     out += [f"- {line}" for line in lines] if lines else ["- No changes"]
     if provider_share is not None:

@@ -51,9 +51,10 @@ def settings(make_settings):
     return make_settings()
 
 
-def or_model(mid, inp, out, ctx=200_000, tools=True, json_=True, modality=("text",)):
+def or_model(mid, inp, out, ctx=200_000, tools=True, json_=True, modality=("text",), reasoning=False):
     """An OpenRouter /models entry; prices in USD per 1M tokens."""
-    params = (["tools", "tool_choice"] if tools else []) + (["response_format"] if json_ else []) + ["temperature"]
+    params = ((["tools", "tool_choice"] if tools else []) + (["response_format"] if json_ else []) + ["temperature"]
+              + (["reasoning", "include_reasoning"] if reasoning else []))
     return {
         "id": mid,
         "name": mid,
